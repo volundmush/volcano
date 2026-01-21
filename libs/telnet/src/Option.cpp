@@ -1,5 +1,5 @@
-#include "telnet/Option.hpp"
+#include "volcano/telnet/Option.hpp"
 
-namespace vol::telnet {
+namespace volcano::telnet {
     
 }

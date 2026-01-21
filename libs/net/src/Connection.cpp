@@ -1,6 +1,6 @@
-#include <net/Connection.hpp>
+#include <volcano/net/Connection.hpp>
 
-namespace vol::net {
+namespace volcano::net {
 
 AnyStream::AnyStream(int64_t id, TcpStream stream, boost::asio::ip::tcp::endpoint endpoint, std::string hostname) : stream_(std::move(stream)), id_(id), endpoint_(std::move(endpoint)), hostname_(std::move(hostname)) {}
 

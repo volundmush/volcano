@@ -1,6 +1,6 @@
-#include <zlib/zlib.hpp>
+#include <volcano/zlib/Zlib.hpp>
 
-namespace vol::zlib {
+namespace volcano::zlib {
 
 DeflateStream::DeflateStream(int level) : buffer_(16 * 1024) {
     zstream_.zalloc = Z_NULL;

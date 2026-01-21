@@ -1,9 +1,9 @@
-add_library(vol_zlib STATIC)
-add_library(vol::zlib ALIAS vol_zlib)
+add_library(volcano_zlib STATIC)
+add_library(volcano::zlib ALIAS volcano_zlib)
 
-target_compile_features(vol_zlib PUBLIC cxx_std_23)
+target_compile_features(volcano_zlib PUBLIC cxx_std_23)
 
-target_include_directories(vol_zlib
+target_include_directories(volcano_zlib
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
@@ -16,15 +16,15 @@ file(GLOB_RECURSE SRC
 )
 
 file(GLOB_RECURSE INCLUDE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/zlib/*.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/volcanocano/zlib/*.hpp
 )
 
-target_precompile_headers(vol_zlib
+target_precompile_headers(volcano_zlib
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/private/pch.hpp
 )
 
-target_sources(vol_zlib
+target_sources(volcano_zlib
     PRIVATE
         ${SRC}
     PUBLIC
@@ -34,7 +34,7 @@ target_sources(vol_zlib
         ${INCLUDE}
 )
 
-target_link_libraries(vol_zlib
+target_link_libraries(volcano_zlib
   PUBLIC
     ZLIB::ZLIB
 )

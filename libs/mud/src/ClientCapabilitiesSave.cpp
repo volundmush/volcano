@@ -1,8 +1,8 @@
-#include <mud/ClientDataSave.hpp>
+#include <volcano/mud/ClientDataSave.hpp>
 
 #include <nlohmann/json.hpp>
 
-namespace vol::mud {
+namespace volcano::mud {
 
 void to_json(nlohmann::json& j, const ClientData& capabilities) {
     j["connection_id"] = capabilities.connection_id;

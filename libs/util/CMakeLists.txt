@@ -1,9 +1,9 @@
-add_library(vol_util STATIC)
-add_library(vol::util ALIAS vol_util)
+add_library(volcano_util STATIC)
+add_library(volcano::util ALIAS volcano_util)
 
-target_compile_features(vol_util PUBLIC cxx_std_23)
+target_compile_features(volcano_util PUBLIC cxx_std_23)
 
-target_include_directories(vol_util
+target_include_directories(volcano_util
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
@@ -16,15 +16,15 @@ file(GLOB_RECURSE SRC
 )
 
 file(GLOB_RECURSE INCLUDE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/util/*.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/volcano/util/*.hpp
 )
 
-target_precompile_headers(vol_util
+target_precompile_headers(volcano_util
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/private/pch.hpp
 )
 
-target_sources(vol_util
+target_sources(volcano_util
     PRIVATE
         ${SRC}
     PUBLIC
@@ -34,7 +34,7 @@ target_sources(vol_util
         ${INCLUDE}
 )
 
-target_link_libraries(vol_util
+target_link_libraries(volcano_util
     PUBLIC
         enchantum::enchantum
 )

@@ -1,8 +1,8 @@
-#include "mud/Command.hpp"
+#include "volcano/mud/Command.hpp"
 #include <regex>
 #include <boost/algorithm/string.hpp>
 
-namespace vol::mud {
+namespace volcano::mud {
     static std::regex cmd_regex(R"(^([A-Za-z0-9-.]+)(?:\/(([A-Za-z0-9-.]+)(?:\/([A-Za-z0-9-.]+)){0,}))?(?:\:([A-Za-z0-9-.]+))?(?:\s+(.*)?)?)", std::regex::icase);
 
 CommandData::CommandData(std::string_view txt_in) : _original(std::make_shared<std::string>(txt_in)) {

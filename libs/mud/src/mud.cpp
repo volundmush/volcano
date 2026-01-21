@@ -1,5 +1,5 @@
-#include <mud/mud.hpp>
+#include <volcano/mud/mud.hpp>
 
-namespace vol::mud {
+namespace volcano::mud {
 // Implementation will live here.
 }

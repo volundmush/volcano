@@ -1,4 +1,4 @@
-#include "dotenv/dotenv.hpp"
+#include "volcano/dotenv/dotenv.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -6,7 +6,7 @@
 #include <fstream>
 #include <sstream>
 
-namespace vol::dotenv {
+namespace volcano::dotenv {
 
     static std::string trim(std::string_view input) {
         size_t start = 0;

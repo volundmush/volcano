@@ -1,7 +1,5 @@
-#pragma once
+#include "volcano/telnet/Base.hpp"
 
-#include "telnet/Base.hpp"
+namespace volcano::telnet {
 
-namespace vol::telnet {
-    
 }

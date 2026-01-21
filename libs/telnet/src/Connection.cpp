@@ -1,7 +1,7 @@
-#include "telnet/Connection.hpp"
-#include "telnet/Option.hpp"
-#include "logging/Log.hpp"
-#include "zlib/zlib.hpp"
+#include "volcano/telnet/Connection.hpp"
+#include "volcano/telnet/Option.hpp"
+#include "volcano/log/Log.hpp"
+#include "volcano/zlib/Zlib.hpp"
 
 #include <cstddef>
 #include <cstring>
@@ -12,7 +12,7 @@
 #include <boost/asio/steady_timer.hpp>
 
 
-namespace vol::telnet {
+namespace volcano::telnet {
 
     static std::expected<std::pair<TelnetMessage, size_t>, std::string> parseTelnetMessage(std::string_view data)
     {
@@ -168,7 +168,7 @@ namespace vol::telnet {
         }, msg);
     }
 
-    TelnetConnection::TelnetConnection(vol::net::AnyStream connection)
+    TelnetConnection::TelnetConnection(volcano::net::AnyStream connection)
         : conn_(std::move(connection)), 
         outgoing_messages_(conn_.get_executor(), 100),
         to_game_messages_(conn_.get_executor(), 100) {
@@ -201,7 +201,7 @@ namespace vol::telnet {
     boost::asio::awaitable<void> TelnetConnection::runReader() {
 
         bool decompressing = false;
-        vol::zlib::InflateStream inflater;
+        volcano::zlib::InflateStream inflater;
         boost::beast::flat_buffer buffer, decompressed_buffer;
 
         try {
@@ -260,7 +260,9 @@ namespace vol::telnet {
                     auto& sub = std::get<TelnetMessageSubnegotiation>(msg);
                     if(sub.option == codes::MCCP3) {
                         // enable incoming decompression. We need to treat all further incoming data as compressed.
-                        changed_capabilities_["mccp3_enabled"] = true;
+                        nlohmann::json capabilities;
+                        capabilities["mccp3_enabled"] = true;
+                        co_await notifyChangedCapabilities(capabilities);
                         decompressing = true;
                         inflater.reset();
                     }
@@ -278,7 +280,7 @@ namespace vol::telnet {
 
     boost::asio::awaitable<void> TelnetConnection::runWriter() {
         bool compressing = false;
-        vol::zlib::DeflateStream deflater(Z_BEST_COMPRESSION);
+        volcano::zlib::DeflateStream deflater(Z_BEST_COMPRESSION);
         boost::beast::flat_buffer buffer, compressed_buffer;
 
         try {
@@ -332,7 +334,9 @@ namespace vol::telnet {
                     auto& sub = std::get<TelnetMessageSubnegotiation>(msg);
                     if(sub.option == codes::MCCP2) {
                         compressing = true;
-                        changed_capabilities_["mccp2_enabled"] = true;
+                        nlohmann::json capabilities;
+                        capabilities["mccp2_enabled"] = true;
+                        co_await notifyChangedCapabilities(capabilities);
                         deflater.reset(Z_BEST_COMPRESSION);
                     }
                 }

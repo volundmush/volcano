@@ -1,13 +1,13 @@
-#include "net/Server.hpp"
-#include "net/net.hpp"
-#include "logging/Log.hpp"
+#include "volcano/net/Server.hpp"
+#include "volcano/net/net.hpp"
+#include "volcano/log/Log.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/ssl.hpp>
 
 #include <atomic>
 
-namespace vol::net
+namespace volcano::net
 {
     boost::asio::awaitable<std::expected<std::string, boost::system::error_code>> reverse_lookup(const boost::asio::ip::tcp::endpoint &endpoint)
     {

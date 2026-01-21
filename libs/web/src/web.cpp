@@ -1,4 +1,4 @@
-#include <web/web.hpp>
+#include <volcano/web/web.hpp>
 
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/use_awaitable.hpp>
@@ -6,7 +6,7 @@
 #include <boost/beast/websocket.hpp>
 #include <boost/url.hpp>
 
-namespace vol::web {
+namespace volcano::web {
 
 static HttpResponse make_response(const HttpRequest& req, HttpAnswer answer) {
 	HttpResponse res{answer.status, req.version()};
@@ -17,8 +17,8 @@ static HttpResponse make_response(const HttpRequest& req, HttpAnswer answer) {
 	return res;
 }
 
-vol::net::ClientHandler make_router_handler(std::shared_ptr<Router> router) {
-	return [router](vol::net::AnyStream&& stream) -> boost::asio::awaitable<void> {
+volcano::net::ClientHandler make_router_handler(std::shared_ptr<Router> router) {
+	return [router](volcano::net::AnyStream&& stream) -> boost::asio::awaitable<void> {
 		boost::beast::flat_buffer buffer;
 
 		for (;;) {

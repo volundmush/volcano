@@ -1,5 +1,5 @@
-#include <util/util.hpp>
+#include <volcano/util/util.hpp>
 
-namespace vol::util {
+namespace volcano::util {
 // Intentionally empty: utilities are header-only for now.
 }

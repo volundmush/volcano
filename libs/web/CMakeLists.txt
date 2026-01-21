@@ -1,9 +1,9 @@
-add_library(vol_web STATIC)
-add_library(vol::web ALIAS vol_web)
+add_library(volcano_web STATIC)
+add_library(volcano::web ALIAS volcano_web)
 
-target_compile_features(vol_web PUBLIC cxx_std_23)
+target_compile_features(volcano_web PUBLIC cxx_std_23)
 
-target_include_directories(vol_web
+target_include_directories(volcano_web
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
@@ -16,15 +16,15 @@ file(GLOB_RECURSE SRC
 )
 
 file(GLOB_RECURSE INCLUDE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/web/*.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/volcano/web/*.hpp
 )
 
-target_precompile_headers(vol_web
+target_precompile_headers(volcano_web
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/private/pch.hpp
 )
 
-target_sources(vol_web
+target_sources(volcano_web
     PRIVATE
         ${SRC}
     PUBLIC
@@ -35,7 +35,7 @@ target_sources(vol_web
 )
 
 # Add deps as needed
-target_link_libraries(vol_web
+target_link_libraries(volcano_web
 PUBLIC
-    vol::net
+    volcano::net
 )

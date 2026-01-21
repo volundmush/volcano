@@ -1,9 +1,9 @@
-#include "net/net.hpp"
-#include "net/Server.hpp"
+#include "volcano/net/net.hpp"
+#include "volcano/net/Server.hpp"
 
 #include <boost/algorithm/string.hpp>
 
-namespace vol::net {
+namespace volcano::net {
 
     TlsConfig tls_config;
     Config tcp_config;

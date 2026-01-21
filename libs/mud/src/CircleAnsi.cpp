@@ -1,4 +1,4 @@
-#include "mud/CircleAnsi.hpp"
+#include "volcano/mud/CircleAnsi.hpp"
 
 #define ANSISTART "\x1B["
 #define ANSISEP ';'
@@ -32,7 +32,7 @@
 #define AB_CYAN "46"
 #define AB_WHITE "47"
 
-namespace vol::mud::circle
+namespace volcano::mud::circle
 {
 
     namespace

@@ -1,4 +1,4 @@
-#include "jwt/jwt.hpp"
+#include "volcano/jwt/jwt.hpp"
 #include <nlohmann/json.hpp>
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
@@ -21,7 +21,7 @@ namespace {
     }
 }
 
-namespace dbat::jwt {
+namespace volcano::jwt {
 
     constexpr std::string_view jwt_header = R"({"alg":"HS256","typ":"JWT"})";
 

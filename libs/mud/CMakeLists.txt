@@ -1,9 +1,9 @@
-add_library(vol_mud STATIC)
-add_library(vol::mud ALIAS vol_mud)
+add_library(volcano_mud STATIC)
+add_library(volcano::mud ALIAS volcano_mud)
 
-target_compile_features(vol_mud PUBLIC cxx_std_23)
+target_compile_features(volcano_mud PUBLIC cxx_std_23)
 
-target_include_directories(vol_mud
+target_include_directories(volcano_mud
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
@@ -16,15 +16,15 @@ file(GLOB_RECURSE SRC
 )
 
 file(GLOB_RECURSE INCLUDE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/mud/*.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/volcano/mud/*.hpp
 )
 
-target_precompile_headers(vol_mud
+target_precompile_headers(volcano_mud
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/private/pch.hpp
 )
 
-target_sources(vol_mud
+target_sources(volcano_mud
     PRIVATE
         ${SRC}
     PUBLIC
@@ -34,7 +34,7 @@ target_sources(vol_mud
         ${INCLUDE}
 )
 
-target_link_libraries(vol_mud
+target_link_libraries(volcano_mud
   PUBLIC
     nlohmann_json
 )

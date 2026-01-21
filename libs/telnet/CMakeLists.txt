@@ -1,9 +1,9 @@
-add_library(vol_telnet STATIC)
-add_library(vol::telnet ALIAS vol_telnet)
+add_library(volcano_telnet STATIC)
+add_library(volcano::telnet ALIAS volcano_telnet)
 
-target_compile_features(vol_telnet PUBLIC cxx_std_23)
+target_compile_features(volcano_telnet PUBLIC cxx_std_23)
 
-target_include_directories(vol_telnet
+target_include_directories(volcano_telnet
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
@@ -18,15 +18,15 @@ file(GLOB_RECURSE SRC
 
 # Also glob up include/*.hpp
 file(GLOB_RECURSE INCLUDE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/telnet/*.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/volcano/telnet/*.hpp
 )
 
-target_precompile_headers(vol_telnet
+target_precompile_headers(volcano_telnet
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/private/pch.hpp
 )
 
-target_sources(vol_telnet
+target_sources(volcano_telnet
     PRIVATE
         ${SRC}
     PUBLIC
@@ -38,9 +38,9 @@ target_sources(vol_telnet
 
 # Add deps as needed
 
-target_link_libraries(vol_telnet
+target_link_libraries(volcano_telnet
   PUBLIC
-    vol::mud
-    vol::net
-    vol::zlib
+    volcano::mud
+    volcano::net
+    volcano::zlib
 )
