@@ -51,4 +51,5 @@ add_subdirectory(libs/zlib)
 add_subdirectory(libs/util)
 add_subdirectory(libs/net)
 add_subdirectory(libs/logging)
+add_subdirectory(libs/web)
 

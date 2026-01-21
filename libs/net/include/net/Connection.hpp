@@ -6,6 +6,7 @@
 #include <fmt/format.h>
 
 #include "net/Base.hpp"
+#include <boost/asio/ssl.hpp>
 
 namespace boost::asio::ip {
     auto inline to_string(const address& address) {
@@ -111,4 +112,11 @@ namespace vol::net {
         }
         return fmt::format("TcpStream#{}({})", any_stream.id(), address);
     }
+}
+
+namespace boost::beast {
+inline void beast_close_socket(vol::net::AnyStream& stream) {
+    boost::system::error_code ec;
+    stream.lowest_layer().close(ec);
+}
 }
