@@ -473,7 +473,7 @@ namespace volcano::telnet {
         telnet_mode = true;
         auto it = options_.find(negotiation.option);
         if(it != options_.end()) {
-            co_await it->second->handleNegotiation(negotiation.command);
+            co_await it->second->at_receive_negotiate(negotiation.command);
         } else {
             // by default, refuse all negotiations
             char response_command;
@@ -502,7 +502,7 @@ namespace volcano::telnet {
         telnet_mode = true;
         auto it = options_.find(subnegotiation.option);
         if(it != options_.end()) {
-            co_await it->second->handleSubNegotiation(subnegotiation.data);
+            co_await it->second->at_receive_subnegotiate(subnegotiation.data);
         } else {
             // unhandled subnegotiation
         }
