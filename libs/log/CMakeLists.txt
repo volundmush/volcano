@@ -1,9 +1,9 @@
-add_library(volcano_logging STATIC)
-add_library(volcano::logging ALIAS volcano_logging)
+add_library(volcano_log STATIC)
+add_library(volcano::log ALIAS volcano_log)
 
-target_compile_features(volcano_logging PUBLIC cxx_std_23)
+target_compile_features(volcano_log PUBLIC cxx_std_23)
 
-target_include_directories(volcano_logging
+target_include_directories(volcano_log
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
@@ -22,7 +22,7 @@ file(GLOB_RECURSE INCLUDE
     ${CMAKE_CURRENT_SOURCE_DIR}/include/volcano/logging/*.hpp
 )
 
-target_sources(volcano_logging
+target_sources(volcano_log
     PRIVATE
         ${SRC}
     PUBLIC
@@ -32,12 +32,12 @@ target_sources(volcano_logging
         ${INCLUDE}
 )
 
-target_precompile_headers(volcano_logging
+target_precompile_headers(volcano_log
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/private/pch.hpp
 )
 
-target_link_libraries(volcano_logging
+target_link_libraries(volcano_log
   PUBLIC
     fmt::fmt
     spdlog::spdlog

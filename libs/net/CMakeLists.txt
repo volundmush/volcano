@@ -39,7 +39,7 @@ target_sources(volcano_net
 # Add deps as needed
 target_link_libraries(volcano_net
   PUBLIC
-    volcano::logging
+    volcano::log
   PRIVATE
     OpenSSL::SSL
     OpenSSL::Crypto
