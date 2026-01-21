@@ -77,6 +77,12 @@ namespace vol::telnet {
     struct TelnetMessageGMCP {
         std::string package;
         nlohmann::json data;
+        TelnetMessageSubnegotiation toSubnegotiation() const;
+    };
+
+    struct TelnetMessageMSSP {
+        std::unordered_map<std::string, std::string> variables;
+        TelnetMessageSubnegotiation toSubnegotiation() const;
     };
 
     struct TelnetChangeCapabilities {
@@ -86,13 +92,9 @@ namespace vol::telnet {
     struct TelnetError {
         std::string message;
     };
-
-    struct TelnetMessageMSSP {
-        std::unordered_map<std::string, std::string> variables;
-    };
     
     using TelnetMessage = std::variant<TelnetMessageData, TelnetMessageSubnegotiation, 
-        TelnetMessageNegotiation, TelnetMessageCommand, TelnetMessageGMCP, TelnetError>;
+        TelnetMessageNegotiation, TelnetMessageCommand, TelnetError>;
     
     using TelnetToGameMessage = std::variant<TelnetMessageData, TelnetMessageGMCP, TelnetChangeCapabilities>;
     using TelnetFromGameMessage = std::variant<TelnetMessageData, TelnetMessageGMCP, TelnetMessageMSSP>;
@@ -186,7 +188,6 @@ namespace vol::telnet {
         private:
         vol::net::AnyStream conn_;
         vol::mud::ClientData client_data_;
-        nlohmann::json changed_capabilities_;
         std::vector<std::shared_ptr<Channel<VoidToken>>> pending_channels_;
         Channel<TelnetMessage> outgoing_messages_;
         Channel<TelnetToGameMessage> to_game_messages_;
@@ -197,8 +198,12 @@ namespace vol::telnet {
         boost::asio::awaitable<void> runWriter();
         boost::asio::awaitable<void> negotiateOptions(boost::asio::steady_timer::duration negotiation_timeout);
         boost::asio::awaitable<void> processData(TelnetMessage& data);
+
         boost::asio::awaitable<void> sendAppData(std::string_view app_data);
         boost::asio::awaitable<void> sendSubNegotiation(char option, std::string_view sub_data);
+        boost::asio::awaitable<void> sendNegotiation(char command, char option);
+
+        boost::asio::awaitable<void> notifyChangedCapabilities(nlohmann::json& capabilities);
 
         std::unordered_map<char, std::shared_ptr<TelnetOption>> option_states_;
 

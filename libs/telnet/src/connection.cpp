@@ -246,10 +246,10 @@ namespace vol::telnet {
             telnet_msg = data_msg;
         } else if(std::holds_alternative<TelnetMessageGMCP>(msg)) {
             TelnetMessageGMCP gmcp_msg = std::get<TelnetMessageGMCP>(msg);
-            telnet_msg = gmcp_msg;
+            telnet_msg = gmcp_msg.toSubnegotiation();
         } else if(std::holds_alternative<TelnetMessageMSSP>(msg)) {
             TelnetMessageMSSP mssp_msg = std::get<TelnetMessageMSSP>(msg);
-            telnet_msg = mssp_msg;
+            telnet_msg = mssp_msg.toSubnegotiation();
         } else {
             LERROR("{} sendToClient received unknown message variant.", *this);
             co_return;
@@ -307,6 +307,15 @@ namespace vol::telnet {
             // other message types are handled internally
         }
 
+        co_return;
+    }
+
+    boost::asio::awaitable<void> TelnetConnection::notifyChangedCapabilities(nlohmann::json& capabilities) {
+        boost::system::error_code ec;
+        co_await to_game_messages_.async_send(ec, TelnetChangeCapabilities{capabilities}, boost::asio::use_awaitable);
+        if(ec) {
+            LERROR("{} to_game channel error: {}", *this, ec.message());
+        }
         co_return;
     }
 
