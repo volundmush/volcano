@@ -8,6 +8,7 @@
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/websocket.hpp>
+#include <boost/url.hpp>
 
 namespace volcano::web
 {
@@ -20,14 +21,20 @@ namespace volcano::web
     {
         http::status status;
         std::string body;
-        http::field content_type_field = http::field::content_type;
         std::string content_type = "text/plain";
     };
 
     using Parameters = std::unordered_map<std::string, std::string>;
 
-    using RequestHandler = std::function<boost::asio::awaitable<HttpAnswer>(volcano::net::AnyStream &, HttpRequest &, Parameters&)>;
-    using WebSocketHandler = std::function<boost::asio::awaitable<void>(WebSocketStream&, HttpRequest&, Parameters&)>;
+    struct RequestContext
+    {
+        HttpRequest& request;
+        Parameters& params;
+        boost::urls::params_view query;
+    };
+
+    using RequestHandler = std::function<boost::asio::awaitable<HttpAnswer>(volcano::net::AnyStream &, RequestContext&)>;
+    using WebSocketHandler = std::function<boost::asio::awaitable<void>(WebSocketStream&, RequestContext&)>;
 
     
 }

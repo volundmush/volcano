@@ -4,13 +4,13 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/websocket.hpp>
-#include <boost/url.hpp>
+
 
 namespace volcano::web {
 
 static HttpResponse make_response(const HttpRequest& req, HttpAnswer answer) {
 	HttpResponse res{answer.status, req.version()};
-	res.set(answer.content_type_field, answer.content_type);
+	res.set(http::field::content_type, answer.content_type);
 	res.keep_alive(req.keep_alive());
 	res.body() = std::move(answer.body);
 	res.prepare_payload();
@@ -53,6 +53,9 @@ volcano::net::ClientHandler make_router_handler(std::shared_ptr<Router> router) 
 			auto& node = *match->node;
 			auto params = std::move(match->params);
 
+			auto ctx = RequestContext{req, params, {}};
+			ctx.query = boost::urls::url_view(req.target()).params();
+
 			if (boost::beast::websocket::is_upgrade(req)) {
 				auto ws_handler = node.websocket_handler();
 				if (!ws_handler) {
@@ -64,7 +67,7 @@ volcano::net::ClientHandler make_router_handler(std::shared_ptr<Router> router) 
 
 				WebSocketStream ws(std::move(stream));
 				co_await ws.async_accept(req, boost::asio::use_awaitable);
-				co_await ws_handler->get()(ws, req, params);
+				co_await ws_handler->get()(ws, ctx);
 				co_return;
 			}
 
@@ -77,7 +80,7 @@ volcano::net::ClientHandler make_router_handler(std::shared_ptr<Router> router) 
 				continue;
 			}
 
-			auto answer = co_await handler->get()(stream, req, params);
+			auto answer = co_await handler->get()(stream, ctx);
 			auto res = make_response(req, std::move(answer));
 			co_await http::async_write(stream, res, boost::asio::use_awaitable);
 		}
