@@ -177,6 +177,9 @@ namespace volcano::telnet {
             client_data_.client_address = conn_.endpoint().address().to_string();
             client_data_.client_hostname = conn_.hostname();
             client_data_.client_protocol = "telnet";
+
+            options_.emplace(codes::NAWS, std::make_shared<NAWSOption>(*this));
+
         }
 
     namespace {
@@ -312,7 +315,7 @@ namespace volcano::telnet {
                         auto input = buffer_as_bytes(buffer);
                         deflater.write(input, [&](std::span<const std::byte> chunk) {
                             append_bytes(compressed_buffer, chunk);
-                        }, vol::zlib::FlushMode::sync);
+                        }, volcano::zlib::FlushMode::sync);
                         buffer.consume(buffer.size());
                     } catch (const std::exception& e) {
                             LERROR("{} zlib deflate error {}", *this, e.what());
@@ -394,6 +397,10 @@ namespace volcano::telnet {
 
     boost::asio::awaitable<void> TelnetConnection::run() {
         using namespace boost::asio::experimental::awaitable_operators;
+
+        for(auto& [code, option] : options_) {
+            co_await option->start();
+        }
 
         co_await (runReader() || runWriter());
 

@@ -7,6 +7,8 @@
 namespace volcano::telnet {
 
     class TelnetConnection {
+        friend class TelnetOption;
+
         public:
         TelnetConnection(volcano::net::AnyStream connection);
         
@@ -14,7 +16,7 @@ namespace volcano::telnet {
         boost::asio::awaitable<void> negotiateOptions(boost::asio::steady_timer::duration negotiation_timeout);
         void requestAbort();
 
-        const vol::mud::ClientData& client_data() const {
+        const volcano::mud::ClientData& client_data() const {
             return client_data_;
         }
 
@@ -44,7 +46,7 @@ namespace volcano::telnet {
 
         boost::asio::awaitable<void> notifyChangedCapabilities(nlohmann::json& capabilities);
 
-        std::unordered_map<char, std::shared_ptr<TelnetOption>> option_states_;
+        std::unordered_map<char, std::shared_ptr<TelnetOption>> options_;
 
         // event handlers
         boost::asio::awaitable<void> processAppData(TelnetMessageData& app_data);

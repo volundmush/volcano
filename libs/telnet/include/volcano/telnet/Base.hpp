@@ -37,7 +37,7 @@ namespace volcano::telnet {
         constexpr char AYT = static_cast<char>(246);
 
         // Telnet Options
-        constexpr char TERMINAL_TYPE = static_cast<char>(24);
+        constexpr char MTTS = static_cast<char>(24);
         constexpr char TELOPT_EOR     = static_cast<char>(25);
         constexpr char NAWS          = static_cast<char>(31);
         constexpr char LINEMODE      = static_cast<char>(34);
@@ -88,7 +88,7 @@ namespace volcano::telnet {
     };
     
     using TelnetMessage = std::variant<TelnetMessageData, TelnetMessageSubnegotiation, 
-        TelnetMessageNegotiation, TelnetMessageCommand, TelnetError>;
+        TelnetMessageNegotiation, TelnetMessageCommand, TelnetMessageGMCP, TelnetError>;
     
     using TelnetToGameMessage = std::variant<TelnetMessageData, TelnetMessageGMCP, TelnetChangeCapabilities>;
     using TelnetFromGameMessage = std::variant<TelnetMessageData, TelnetMessageGMCP, TelnetMessageMSSP>;
