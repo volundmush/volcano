@@ -2,5 +2,5 @@
 
 namespace volcano::util
 {
-    std::regex parseRangeRegex(R"(^(\d+)(-(\d+))?$)");
+    std::regex parseRangeRegex(R"(^(\d+)(-(\d+))?$)", std::regex::icase);
 }
