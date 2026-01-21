@@ -53,4 +53,4 @@ add_subdirectory(libs/net)
 add_subdirectory(libs/logging)
 add_subdirectory(libs/web)
 add_subdirectory(libs/mud)
-
+add_subdirectory(libs/telnet)

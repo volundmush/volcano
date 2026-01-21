@@ -5,6 +5,7 @@
 namespace vol::mud {
 
 void to_json(nlohmann::json& j, const ClientData& capabilities) {
+    j["connection_id"] = capabilities.connection_id;
     j["client_address"] = capabilities.client_address;
     j["client_hostname"] = capabilities.client_hostname;
     j["client_protocol"] = capabilities.client_protocol;
@@ -36,6 +37,7 @@ void to_json(nlohmann::json& j, const ClientData& capabilities) {
 }
 
 void from_json(const nlohmann::json& j, ClientData& capabilities) {
+    if(j.contains("connection_id")) j.at("connection_id").get_to(capabilities.connection_id);
     if(j.contains("client_address")) j.at("client_address").get_to(capabilities.client_address);
     if(j.contains("client_hostname")) j.at("client_hostname").get_to(capabilities.client_hostname);
     if(j.contains("client_protocol")) j.at("client_protocol").get_to(capabilities.client_protocol);

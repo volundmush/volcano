@@ -9,30 +9,27 @@
 #include <boost/asio/ssl.hpp>
 
 namespace boost::asio::ip {
-    auto inline to_string(const address& address) {
+    inline auto format_as(const address& address) {
         return address.to_string();
     }
-}
 
-namespace boost::asio::ip {
-
-    auto inline to_string(const tcp::endpoint& endpoint) {
+    inline auto format_as(const tcp::endpoint& endpoint) {
         return fmt::format("{}:{}", endpoint.address().to_string(), endpoint.port());
     }
 
-    auto inline to_string(const tcp::socket& socket) {
+    inline auto format_as(const tcp::socket& socket) {
         boost::system::error_code ec;
         auto endpoint = socket.remote_endpoint(ec);
-        std::string address = ec ? "<unknown>" : to_string(endpoint.address());
+        std::string address = ec ? "<unknown>" : format_as(endpoint.address());
         return fmt::format("TcpStream({})", address);
     }
 }
 
 namespace boost::asio::ssl {
-    auto inline to_string(const stream<boost::asio::ip::tcp::socket>& ssl_stream) {
+    inline auto format_as(const stream<boost::asio::ip::tcp::socket>& ssl_stream) {
         boost::system::error_code ec;
         auto endpoint = ssl_stream.next_layer().remote_endpoint(ec);
-        std::string address = ec ? "<unknown>" : boost::asio::ip::to_string(endpoint.address());
+        std::string address = ec ? "<unknown>" : boost::asio::ip::format_as(endpoint.address());
         return fmt::format("TlsStream({})", address);
     }
 }
@@ -48,8 +45,8 @@ namespace vol::net {
         using lowest_layer_type = TcpStream::lowest_layer_type;
 
         AnyStream() = delete;
-        AnyStream(int64_t id, TcpStream stream);
-        AnyStream(int64_t id, TlsStream stream);
+        AnyStream(int64_t id, TcpStream stream, boost::asio::ip::tcp::endpoint endpoint, std::string hostname);
+        AnyStream(int64_t id, TlsStream stream, boost::asio::ip::tcp::endpoint endpoint, std::string hostname);
 
         AnyStream(const AnyStream&) = delete;
         AnyStream& operator=(const AnyStream&) = delete;
@@ -97,21 +94,31 @@ namespace vol::net {
             return std::get<TlsStream>(stream_).async_write_some(buffers, std::forward<CompletionToken>(token));
         }
 
+        const std::string& hostname() const {
+            return hostname_;
+        }
+
+        const boost::asio::ip::tcp::endpoint& endpoint() const {
+            return endpoint_;
+        }
+
     private:
         std::variant<TcpStream, TlsStream> stream_;
         int64_t id_{0};
+        std::string hostname_;
+        boost::asio::ip::tcp::endpoint endpoint_;
     };
 
-    auto inline to_string(const AnyStream& any_stream) {
-        auto &lowest = any_stream.lowest_layer();
-        boost::system::error_code ec;
-        auto endpoint = lowest.remote_endpoint(ec);
-        std::string address = ec ? "<unknown>" : boost::asio::ip::to_string(endpoint.address());
-        if (any_stream.is_tls()) {
-            return fmt::format("TlsStream#{}({})", any_stream.id(), address);
+        inline auto format_as(const AnyStream& any_stream) {
+            auto &lowest = any_stream.lowest_layer();
+            boost::system::error_code ec;
+            auto endpoint = lowest.remote_endpoint(ec);
+            std::string address = ec ? "<unknown>" : boost::asio::ip::format_as(endpoint.address());
+            if (any_stream.is_tls()) {
+                return fmt::format("AnyTlsStream#{}({})", any_stream.id(), address);
+            }
+            return fmt::format("AnyTcpStream#{}({})", any_stream.id(), address);
         }
-        return fmt::format("TcpStream#{}({})", any_stream.id(), address);
-    }
 }
 
 namespace boost::beast {

@@ -2,9 +2,9 @@
 
 namespace vol::net {
 
-AnyStream::AnyStream(int64_t id, TcpStream stream) : stream_(std::move(stream)), id_(id) {}
+AnyStream::AnyStream(int64_t id, TcpStream stream, boost::asio::ip::tcp::endpoint endpoint, std::string hostname) : stream_(std::move(stream)), id_(id), endpoint_(std::move(endpoint)), hostname_(std::move(hostname)) {}
 
-AnyStream::AnyStream(int64_t id, TlsStream stream) : stream_(std::move(stream)), id_(id) {}
+AnyStream::AnyStream(int64_t id, TlsStream stream, boost::asio::ip::tcp::endpoint endpoint, std::string hostname) : stream_(std::move(stream)), id_(id), endpoint_(std::move(endpoint)), hostname_(std::move(hostname)) {}
 
 bool AnyStream::is_tls() const {
     return std::holds_alternative<TlsStream>(stream_);

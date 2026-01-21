@@ -9,15 +9,10 @@
 
 namespace vol::net
 {
-    boost::asio::awaitable<std::expected<std::string, boost::system::error_code>> reverse_lookup(boost::asio::ip::tcp::socket &socket)
+    boost::asio::awaitable<std::expected<std::string, boost::system::error_code>> reverse_lookup(const boost::asio::ip::tcp::endpoint &endpoint)
     {
         boost::system::error_code ec;
-        auto remote_endpoint = socket.remote_endpoint(ec);
-        if (ec)
-        {
-            co_return std::unexpected(ec);
-        }
-        auto remote_address = remote_endpoint.address();
+        auto remote_address = endpoint.address();
         boost::asio::ip::tcp::resolver resolver(co_await boost::asio::this_coro::executor);
         try
         {
@@ -49,13 +44,14 @@ namespace vol::net
 
     boost::asio::awaitable<void> Server::accept_client(TcpStream socket, int64_t connection_id)
     {
-        auto client_address = socket.remote_endpoint().address().to_string();
+        auto endpoint = socket.remote_endpoint();
+        auto client_address = endpoint.address().to_string();
         auto client_hostname = client_address;
         LINFO("Incoming connection from {}", client_address);
 
         if (performReverseLookup)
         {
-            if (auto rev_res = co_await reverse_lookup(socket); rev_res)
+            if (auto rev_res = co_await reverse_lookup(endpoint); rev_res)
             {
                 client_hostname = rev_res.value();
                 LINFO("Resolved hostname {} for {}", client_hostname, client_address);
@@ -77,12 +73,12 @@ namespace vol::net
                 co_return;
             }
             LINFO("Completed TLS handshake with {}", client_hostname);
-            AnyStream stream(connection_id, std::move(ssl_socket));
+            AnyStream stream(connection_id, std::move(ssl_socket), endpoint, client_hostname);
             co_await handle_client(std::move(stream));
         }
         else
         {
-            AnyStream stream(connection_id, std::move(socket));
+            AnyStream stream(connection_id, std::move(socket), endpoint, client_hostname);
             co_await handle_client(std::move(stream));
         }
     }
