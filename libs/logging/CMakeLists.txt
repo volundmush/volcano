@@ -1,6 +1,8 @@
 add_library(vol_logging STATIC)
 add_library(vol::logging ALIAS vol_logging)
 
+target_compile_features(vol_logging PUBLIC cxx_std_23)
+
 target_include_directories(vol_logging
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

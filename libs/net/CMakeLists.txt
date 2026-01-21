@@ -1,6 +1,8 @@
 add_library(vol_net STATIC)
 add_library(vol::net ALIAS vol_net)
 
+target_compile_features(vol_net PUBLIC cxx_std_23)
+
 target_include_directories(vol_net
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
