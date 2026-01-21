@@ -1,15 +1,172 @@
-#include "telnet/telnet.hpp"
+#include "telnet/Connection.hpp"
+#include "telnet/Option.hpp"
 #include "logging/Log.hpp"
-#include <boost/beast/core/flat_buffer.hpp>
-#include <boost/asio/experimental/awaitable_operators.hpp>
-#include <boost/asio/steady_timer.hpp>
-#include <zlib/zlib.hpp>
+#include "zlib/zlib.hpp"
 
 #include <cstddef>
 #include <cstring>
 #include <span>
 
+#include <boost/beast/core/flat_buffer.hpp>
+#include <boost/asio/experimental/awaitable_operators.hpp>
+#include <boost/asio/steady_timer.hpp>
+
+
 namespace vol::telnet {
+
+    static std::expected<std::pair<TelnetMessage, size_t>, std::string> parseTelnetMessage(std::string_view data)
+    {
+        if (data.empty())
+        {
+            return std::unexpected("No data to parse");
+        }
+
+        auto avail = data.size();
+
+        if (data[0] == codes::IAC)
+        {
+            // we're doing an IAC sequence.
+            if (avail < 2)
+            {
+                return std::unexpected("Incomplete IAC sequence - need at least 2 bytes");
+            }
+
+            switch (data[1])
+            {
+            case codes::WILL:
+            case codes::WONT:
+            case codes::DO:
+            case codes::DONT:
+            {
+                if (avail < 3)
+                {
+                    return std::unexpected("Incomplete negotiation sequence - need at least 3 bytes");
+                }
+                TelnetMessage msg = TelnetMessageNegotiation{data[1], data[2]};
+                return std::make_pair(msg, 3);
+            }
+
+            case codes::SB:
+            {
+                // subnegotiation: IAC SB <op> [<data>] IAC SE
+                if (avail < 5)
+                {
+                    return std::unexpected("Incomplete subnegotiation sequence - need at least 5 bytes");
+                }
+                auto op = data[2];
+                // we know that we start with IAC SB <op>... now we need to scan until we find an unescaped IAC SE
+                size_t pos = 3;
+                while (pos + 1 < avail)
+                {
+                    if (data[pos] == codes::IAC)
+                    {
+                        if (data[pos + 1] == codes::SE)
+                        {
+                            // end of subnegotiation
+                            std::string sub_data;
+                            if (pos > 3)
+                            {
+                                sub_data.reserve(pos - 3);
+                                size_t i = 3;
+                                while (i < pos) {
+                                    if (data[i] == codes::IAC && i + 1 < pos && data[i + 1] == codes::IAC) {
+                                        sub_data.push_back(codes::IAC);
+                                        i += 2;
+                                    } else {
+                                        sub_data.push_back(data[i]);
+                                        i += 1;
+                                    }
+                                }
+                            }
+                            auto translated = TelnetMessageSubnegotiation{op, sub_data};
+                            return std::make_pair(translated, pos + 2);
+                        }
+                        else if (data[pos + 1] == codes::IAC)
+                        {
+                            // escaped 255 byte, skip it
+                            pos += 2;
+                        }
+                        else
+                        {
+                            // something else - just continue
+                            pos += 1;
+                        }
+                    }
+                    else
+                    {
+                        pos += 1;
+                    }
+                }
+                return std::unexpected("Incomplete subnegotiation sequence - missing IAC SE terminator");
+            }
+            case codes::IAC:
+            {
+                // escaped 255 data byte
+                TelnetMessage msg = TelnetMessageData{std::string(1, codes::IAC)};
+                return std::make_pair(msg, 2);
+            }
+            default:
+            {
+                // command
+                TelnetMessage msg = TelnetMessageCommand{data[1]};
+                return std::make_pair(msg, 2);
+            }
+            }
+        }
+        else
+        {
+            // regular data
+            size_t pos = data.find(codes::IAC);
+            if (pos == std::string_view::npos)
+            {
+                pos = data.size();
+            }
+            TelnetMessage msg = TelnetMessageData{std::string(data.substr(0, pos))};
+            return std::make_pair(msg, pos);
+        }
+    }
+
+    static void append_iac_escaped(std::string& out, std::string_view data) {
+        for (char ch : data) {
+            out.push_back(ch);
+            if (static_cast<unsigned char>(ch) == static_cast<unsigned char>(codes::IAC)) {
+                out.push_back(codes::IAC);
+            }
+        }
+    }
+
+    static void append_subnegotiation(std::string& out, char option, std::string_view data) {
+        out.push_back(codes::IAC);
+        out.push_back(codes::SB);
+        out.push_back(option);
+        append_iac_escaped(out, data);
+        out.push_back(codes::IAC);
+        out.push_back(codes::SE);
+    }
+
+    static std::string encodeTelnetMessage(const TelnetMessage& msg) {
+        return std::visit([](const auto& m) -> std::string {
+            using T = std::decay_t<decltype(m)>;
+            std::string out;
+
+            if constexpr (std::is_same_v<T, TelnetMessageData>) {
+                out = m.data;
+            } else if constexpr (std::is_same_v<T, TelnetMessageNegotiation>) {
+                out.push_back(codes::IAC);
+                out.push_back(m.command);
+                out.push_back(m.option);
+            } else if constexpr (std::is_same_v<T, TelnetMessageCommand>) {
+                out.push_back(codes::IAC);
+                out.push_back(m.command);
+            } else if constexpr (std::is_same_v<T, TelnetMessageSubnegotiation>) {
+                append_subnegotiation(out, m.option, m.data);
+            } else if constexpr (std::is_same_v<T, TelnetError>) {
+                out.clear();
+            }
+
+            return out;
+        }, msg);
+    }
 
     TelnetConnection::TelnetConnection(vol::net::AnyStream connection)
         : conn_(std::move(connection)), 
