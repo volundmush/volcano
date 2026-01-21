@@ -34,22 +34,27 @@ namespace volcano::telnet {
         Channel<TelnetToGameMessage> to_game_messages_;
         std::atomic_bool abort_requested_{false};
         std::string append_data_buffer_;
+        bool telnet_mode{false};
         
         boost::asio::awaitable<void> runReader();
         boost::asio::awaitable<void> runWriter();
+        boost::asio::awaitable<void> runKeepAlive();
         
         boost::asio::awaitable<void> processData(TelnetMessage& data);
 
         boost::asio::awaitable<void> sendAppData(std::string_view app_data);
         boost::asio::awaitable<void> sendSubNegotiation(char option, std::string_view sub_data);
         boost::asio::awaitable<void> sendNegotiation(char command, char option);
-
+        boost::asio::awaitable<void> sendCommand(char command);
         boost::asio::awaitable<void> notifyChangedCapabilities(nlohmann::json& capabilities);
 
         std::unordered_map<char, std::shared_ptr<TelnetOption>> options_;
 
         // event handlers
-        boost::asio::awaitable<void> processAppData(TelnetMessageData& app_data);
+        boost::asio::awaitable<void> handleAppData(TelnetMessageData& app_data);
+        boost::asio::awaitable<void> handleNegotiate(TelnetMessageNegotiation& negotiation);
+        boost::asio::awaitable<void> handleSubNegotiation(TelnetMessageSubnegotiation& subnegotiation);
+        boost::asio::awaitable<void> handleCommand(TelnetMessageCommand& command);
     };
 
     inline auto format_as(const TelnetConnection& telnet_connection) {
@@ -62,4 +67,4 @@ namespace volcano::telnet {
         );
     }
 
-} // namespace vol::telnet
+} // namespace volcano::telnet

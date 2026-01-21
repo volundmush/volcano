@@ -178,7 +178,16 @@ namespace volcano::telnet {
             client_data_.client_hostname = conn_.hostname();
             client_data_.client_protocol = "telnet";
 
+            options_.emplace(codes::SGA, std::make_shared<SGAOption>(*this));
             options_.emplace(codes::NAWS, std::make_shared<NAWSOption>(*this));
+            options_.emplace(codes::CHARSET, std::make_shared<CHARSETOption>(*this));
+            options_.emplace(codes::MTTS, std::make_shared<MTTSOption>(*this));
+            options_.emplace(codes::MSSP, std::make_shared<MSSPOption>(*this));
+            options_.emplace(codes::MCCP2, std::make_shared<MCCP2Option>(*this));
+            options_.emplace(codes::MCCP3, std::make_shared<MCCP3Option>(*this));
+            options_.emplace(codes::GMCP, std::make_shared<GMCPOption>(*this));
+            options_.emplace(codes::LINEMODE, std::make_shared<LineModeOption>(*this));
+            options_.emplace(codes::TELOPT_EOR, std::make_shared<EOROption>(*this));
 
         }
 
@@ -431,7 +440,7 @@ namespace volcano::telnet {
         co_return;
     }
 
-    boost::asio::awaitable<void> TelnetConnection::processAppData(TelnetMessageData& app_data) {
+    boost::asio::awaitable<void> TelnetConnection::handleAppData(TelnetMessageData& app_data) {
         append_data_buffer_ += app_data.data;
 
         auto send_line = [this](std::string line) -> boost::asio::awaitable<void> {
@@ -460,10 +469,56 @@ namespace volcano::telnet {
         co_return;
     }
 
+    boost::asio::awaitable<void> TelnetConnection::handleNegotiate(TelnetMessageNegotiation& negotiation) {
+        telnet_mode = true;
+        auto it = options_.find(negotiation.option);
+        if(it != options_.end()) {
+            co_await it->second->handleNegotiation(negotiation.command);
+        } else {
+            // by default, refuse all negotiations
+            char response_command;
+            switch(negotiation.command) {
+                case codes::DO:
+                    response_command = codes::WONT;
+                    break;
+                case codes::DONT:
+                    response_command = codes::WONT;
+                    break;
+                case codes::WILL:
+                    response_command = codes::DONT;
+                    break;
+                case codes::WONT:
+                    response_command = codes::DONT;
+                    break;
+                default:
+                    co_return;
+            }
+            co_await sendNegotiation(response_command, negotiation.option);
+        }
+        co_return;
+    }
+
+    boost::asio::awaitable<void> TelnetConnection::handleSubNegotiation(TelnetMessageSubnegotiation& subnegotiation) {
+        telnet_mode = true;
+        auto it = options_.find(subnegotiation.option);
+        if(it != options_.end()) {
+            co_await it->second->handleSubNegotiation(subnegotiation.data);
+        } else {
+            // unhandled subnegotiation
+        }
+        co_return;
+    }
+
+    boost::asio::awaitable<void> TelnetConnection::handleCommand(TelnetMessageCommand& command) {
+        // Handle Telnet commands here if needed
+        telnet_mode = true;
+        co_return;
+    }
+
     boost::asio::awaitable<void> TelnetConnection::processData(TelnetMessage& data) {
         if(std::holds_alternative<TelnetMessageData>(data)) {
             TelnetMessageData& msg = std::get<TelnetMessageData>(data);
-            co_await processAppData(msg);
+            co_await handleAppData(msg);
         } else if(std::holds_alternative<TelnetMessageGMCP>(data)) {
             TelnetMessageGMCP& msg = std::get<TelnetMessageGMCP>(data);
             boost::system::error_code ec;
@@ -473,6 +528,66 @@ namespace volcano::telnet {
             }
         } else {
             // other message types are handled internally
+        }
+
+        co_return;
+    }
+
+    boost::asio::awaitable<void> TelnetConnection::sendAppData(std::string_view app_data) {
+        boost::system::error_code ec;
+        co_await outgoing_messages_.async_send(ec, TelnetMessageData{std::string(app_data)}, boost::asio::use_awaitable);
+        if(ec) {
+            LERROR("{} outgoing channel error: {}", *this, ec.message());
+        }
+        co_return;
+    }
+
+    boost::asio::awaitable<void> TelnetConnection::sendSubNegotiation(char option, std::string_view sub_data) {
+        boost::system::error_code ec;
+        co_await outgoing_messages_.async_send(ec, TelnetMessageSubnegotiation{option, std::string(sub_data)}, boost::asio::use_awaitable);
+        if(ec) {
+            LERROR("{} outgoing channel error: {}", *this, ec.message());
+        }
+        co_return;
+    }
+
+    boost::asio::awaitable<void> TelnetConnection::sendNegotiation(char command, char option) {
+        boost::system::error_code ec;
+        co_await outgoing_messages_.async_send(ec, TelnetMessageNegotiation{command, option}, boost::asio::use_awaitable);
+        if(ec) {
+            LERROR("{} outgoing channel error: {}", *this, ec.message());
+        }
+        co_return;
+    }
+
+    boost::asio::awaitable<void> TelnetConnection::sendCommand(char command) {
+        boost::system::error_code ec;
+        co_await outgoing_messages_.async_send(ec, TelnetMessageCommand{command}, boost::asio::use_awaitable);
+        if(ec) {
+            LERROR("{} outgoing channel error: {}", *this, ec.message());
+        }
+        co_return;
+    }
+
+    boost::asio::awaitable<void> TelnetConnection::runKeepAlive() {
+        auto exec = co_await boost::asio::this_coro::executor;
+        boost::asio::steady_timer keepalive_timer(exec);
+        try {
+            while(true) {
+                keepalive_timer.expires_after(std::chrono::seconds(30));
+                boost::system::error_code timer_ec;
+                co_await keepalive_timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, timer_ec));
+                if(timer_ec) {
+                    LERROR("{} keepalive timer error: {}", *this, timer_ec.message());
+                    co_return;
+                }
+
+                if(telnet_mode) {
+                    co_await sendCommand(codes::NOP);
+                }
+            }
+        } catch(const boost::system::system_error& e) {
+              LERROR("{} keepalive encountered an error: {}", *this, e.what());
         }
 
         co_return;
