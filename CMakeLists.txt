@@ -66,6 +66,7 @@ add_subdirectory(libs/log)
 add_subdirectory(libs/web)
 add_subdirectory(libs/mud)
 add_subdirectory(libs/telnet)
+add_subdirectory(libs/config)
 
 # Optional alias for convenience
 set(VOLCANO_TARGETS
@@ -78,6 +79,7 @@ set(VOLCANO_TARGETS
   volcano_web
   volcano_mud
   volcano_telnet
+  volcano_config
 )
 
 if(VOLCANO_ENABLE_INSTALL)
