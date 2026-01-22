@@ -7,7 +7,7 @@ module;
 
 export module volcano.circle;
 
-export namespace volcano::mud::circle {
+export namespace volcano::circle {
 
     constexpr int COLOR_NORMAL = 0;
     constexpr int COLOR_ROOMNAME = 1;
@@ -35,7 +35,7 @@ export namespace volcano::mud::circle {
 
 } // namespace volcano::mud::circle
 
-namespace volcano::mud::circle {
+namespace volcano::circle {
 
 #define ANSISTART "\x1B["
 #define ANSISEP ';'
@@ -283,4 +283,4 @@ namespace volcano::mud::circle {
         }
     }
 
-} // namespace volcano::mud::circle
+} // namespace volcano::circle

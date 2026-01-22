@@ -42,7 +42,7 @@ if(UNIX AND NOT APPLE)
 endif()
 
 CPMAddPackage(NAME fmt                   GITHUB_REPOSITORY fmtlib/fmt            GIT_TAG 12.1.0
-    OPTIONS "FMT_USE_CMAKE_MODULES ON"
+  OPTIONS "FMT_MODULE OFF"
 )
 CPMAddPackage(NAME spdlog                GITHUB_REPOSITORY gabime/spdlog         VERSION 1.17.0
   OPTIONS "SPDLOG_FMT_EXTERNAL ON"
@@ -66,5 +66,5 @@ add_subdirectory(libs/circle)
 add_subdirectory(libs/client)
 add_subdirectory(libs/web)
 add_subdirectory(libs/mud)
-#add_subdirectory(libs/telnet)
+add_subdirectory(libs/telnet)
 add_subdirectory(libs/config)

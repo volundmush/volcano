@@ -6,12 +6,14 @@ module;
 #include <optional>
 #include <string>
 #include <string_view>
-#include <volcano/net/net.hpp>
+
+#include <boost/asio.hpp>
 
 export module volcano.config;
 
 export import volcano.dotenv;
 import volcano.log;
+import volcano.net;
 
 export namespace volcano::config {
 
