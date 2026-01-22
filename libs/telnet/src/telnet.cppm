@@ -1,3 +1,10 @@
+export module volcano.telnet;
+
+export import :base;
+export import :options;
+export import :connection;
+
+#if 0
 module;
 
 #include <algorithm>
@@ -1659,3 +1666,5 @@ namespace volcano::telnet {
         return "EOR";
     }
 }
+
+#endif
