@@ -1,6 +1,7 @@
 #include "volcano/telnet/Option.hpp"
 #include "volcano/telnet/Connection.hpp"
-#include "volcano/log/Log.hpp"
+
+import volcano.log;
 
 #include <algorithm>
 #include <cctype>

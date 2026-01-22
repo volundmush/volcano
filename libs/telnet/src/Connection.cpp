@@ -1,7 +1,8 @@
 #include "volcano/telnet/Connection.hpp"
 #include "volcano/telnet/Option.hpp"
-#include "volcano/log/Log.hpp"
 #include "volcano/zlib/Zlib.hpp"
+
+import volcano.log;
 
 #include <cstddef>
 #include <cstring>

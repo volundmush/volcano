@@ -1,27 +1,62 @@
-#include "volcano/jwt/jwt.hpp"
-#include <nlohmann/json.hpp>
+module;
+
+#include <chrono>
+#include <cstdint>
+#include <expected>
+#include <string>
+#include <string_view>
+
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
-#include <chrono>
-#include <string_view>
 
-namespace {
-    std::string hmacSha256(std::string_view data, std::string_view secret) {
-        unsigned int length = 0;
-        unsigned char digest[EVP_MAX_MD_SIZE];
-        HMAC(EVP_sha256(),
-             reinterpret_cast<const unsigned char*>(secret.data()),
-             static_cast<int>(secret.size()),
-             reinterpret_cast<const unsigned char*>(data.data()),
-             data.size(),
-             digest,
-             &length);
-        return std::string(reinterpret_cast<const char*>(digest), length);
-    }
-}
+export module volcano.jwt;
+
+import nlohmann.json;
+
+export namespace volcano::jwt {
+
+    std::string base64UrlEncode(std::string_view input);
+    std::string base64UrlDecode(std::string_view input);
+
+    class JwtContext {
+    public:
+        std::string secret;
+        std::chrono::seconds token_expiry{3600};
+        std::chrono::seconds refresh_token_expiry{std::chrono::hours(24 * 7)};
+        std::string issuer{"volcano"};
+        std::string audience{"volcano-client"};
+
+        std::string create(const nlohmann::json& payload, std::chrono::seconds expiration) const;
+        std::expected<nlohmann::json, std::string> verify(std::string_view token) const;
+
+        std::string create_access_token(nlohmann::json&& claims) const;
+        std::string create_refresh_token(nlohmann::json&& claims) const;
+        nlohmann::json build_token_response(std::string_view access_token, std::string_view refresh_token) const;
+
+    private:
+        static std::int64_t now_seconds();
+        nlohmann::json base_claims(nlohmann::json& claims) const;
+    };
+
+} // namespace volcano::jwt
 
 namespace volcano::jwt {
+
+    namespace detail {
+        std::string hmacSha256(std::string_view data, std::string_view secret) {
+            unsigned int length = 0;
+            unsigned char digest[EVP_MAX_MD_SIZE];
+            HMAC(EVP_sha256(),
+                 reinterpret_cast<const unsigned char*>(secret.data()),
+                 static_cast<int>(secret.size()),
+                 reinterpret_cast<const unsigned char*>(data.data()),
+                 data.size(),
+                 digest,
+                 &length);
+            return std::string(reinterpret_cast<const char*>(digest), length);
+        }
+    } // namespace detail
 
     constexpr std::string_view jwt_header = R"({"alg":"HS256","typ":"JWT"})";
 
@@ -35,7 +70,7 @@ namespace volcano::jwt {
         const std::string header_part = base64UrlEncode(std::string(jwt_header));
         const std::string payload_part = base64UrlEncode(payload_with_exp.dump());
         const std::string signing_input = header_part + "." + payload_part;
-        const std::string signature = hmacSha256(signing_input, secret);
+        const std::string signature = detail::hmacSha256(signing_input, secret);
         const std::string signature_part = base64UrlEncode(signature);
 
         return signing_input + "." + signature_part;
@@ -56,7 +91,7 @@ namespace volcano::jwt {
         auto signature_part = token.substr(second_dot + 1);
 
         const std::string signing_input = std::string(header_part) + "." + std::string(payload_part);
-        auto expected_signature = base64UrlEncode(hmacSha256(signing_input, secret));
+        auto expected_signature = base64UrlEncode(detail::hmacSha256(signing_input, secret));
 
         if (expected_signature.size() != signature_part.size() ||
             CRYPTO_memcmp(expected_signature.data(), signature_part.data(), expected_signature.size()) != 0) {
@@ -220,4 +255,5 @@ namespace volcano::jwt {
         response_json["expires_in"] = static_cast<int>(token_expiry.count());
         return response_json;
     }
-}
+
+} // namespace volcano::jwt

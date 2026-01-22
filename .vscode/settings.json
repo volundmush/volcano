@@ -1,1 +1,13 @@
-{}
+{
+	"C_Cpp.intelliSenseEngine": "disabled",
+	"C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+	"clangd.arguments": [
+		"--compile-commands-dir=build",
+		"--experimental-modules-support"
+	],
+	"cmake.configureSettings": {
+		"CMAKE_C_COMPILER": "clang",
+		"CMAKE_CXX_COMPILER": "clang++",
+		"CMAKE_CXX_SCAN_FOR_MODULES": "ON"
+	}
+}

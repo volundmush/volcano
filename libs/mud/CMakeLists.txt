@@ -37,4 +37,6 @@ target_sources(volcano_mud
 target_link_libraries(volcano_mud
   PUBLIC
     nlohmann_json
+        volcano::circle
+        volcano::client
 )

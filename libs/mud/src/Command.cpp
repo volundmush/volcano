@@ -5,7 +5,7 @@
 namespace volcano::mud {
     static std::regex cmd_regex(R"(^([A-Za-z0-9-.]+)(?:\/(([A-Za-z0-9-.]+)(?:\/([A-Za-z0-9-.]+)){0,}))?(?:\:([A-Za-z0-9-.]+))?(?:\s+(.*)?)?)", std::regex::icase);
 
-CommandData::CommandData(std::string_view txt_in) : _original(std::make_shared<std::string>(txt_in)) {
+CommandData::CommandData(std::string_view txt_in) : _original(std::make_unique<std::string>(txt_in)) {
     // Take ownership of a copy of the input, then we'll make everything else
     // a view to it.
     original = std::string_view(_original->data(), _original->size());

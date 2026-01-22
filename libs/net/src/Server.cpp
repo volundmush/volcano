@@ -1,6 +1,7 @@
 #include "volcano/net/Server.hpp"
 #include "volcano/net/net.hpp"
-#include "volcano/log/Log.hpp"
+
+import volcano.log;
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/ssl.hpp>

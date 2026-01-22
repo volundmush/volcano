@@ -41,18 +41,17 @@ if(UNIX AND NOT APPLE)
   set(MATH_LIB m)
 endif()
 
-set(SPDLOG_FMT_EXTERNAL ON)
-if(VOLCANO_ENABLE_INSTALL)
-  find_package(fmt CONFIG REQUIRED)
-  find_package(spdlog CONFIG REQUIRED)
-  find_package(nlohmann_json CONFIG REQUIRED)
-  find_package(enchantum CONFIG REQUIRED)
-else()
-  CPMAddPackage(NAME fmt                   GITHUB_REPOSITORY fmtlib/fmt            GIT_TAG 12.1.0)
-  CPMAddPackage(NAME spdlog                GITHUB_REPOSITORY gabime/spdlog         VERSION 1.17.0)
-  CPMAddPackage(NAME nlohmann_json         GITHUB_REPOSITORY nlohmann/json         VERSION 3.12.0)
-  CPMAddPackage(NAME enchantum            GITHUB_REPOSITORY ZXShady/enchantum    GIT_TAG 0.3.0)
-endif()
+CPMAddPackage(NAME fmt                   GITHUB_REPOSITORY fmtlib/fmt            GIT_TAG 12.1.0
+    OPTIONS "FMT_USE_CMAKE_MODULES ON"
+)
+CPMAddPackage(NAME spdlog                GITHUB_REPOSITORY gabime/spdlog         VERSION 1.17.0
+  OPTIONS "SPDLOG_FMT_EXTERNAL ON"
+)
+CPMAddPackage(NAME nlohmann_json         GITHUB_REPOSITORY nlohmann/json         GIT_TAG develop
+   OPTIONS "NLOHMANN_JSON_BUILD_MODULES ON"
+)
+
+CPMAddPackage(NAME enchantum            GITHUB_REPOSITORY ZXShady/enchantum    GIT_TAG 0.3.0)
 
 
 # ---------------- targets ----------------
@@ -63,54 +62,9 @@ add_subdirectory(libs/zlib)
 add_subdirectory(libs/util)
 add_subdirectory(libs/net)
 add_subdirectory(libs/log)
+add_subdirectory(libs/circle)
+add_subdirectory(libs/client)
 add_subdirectory(libs/web)
 add_subdirectory(libs/mud)
-add_subdirectory(libs/telnet)
+#add_subdirectory(libs/telnet)
 add_subdirectory(libs/config)
-
-# Optional alias for convenience
-set(VOLCANO_TARGETS
-  volcano_dotenv
-  volcano_jwt
-  volcano_zlib
-  volcano_util
-  volcano_net
-  volcano_log
-  volcano_web
-  volcano_mud
-  volcano_telnet
-  volcano_config
-)
-
-if(VOLCANO_ENABLE_INSTALL)
-  install(
-    TARGETS ${VOLCANO_TARGETS}
-    EXPORT volcanoTargets
-    FILE_SET HEADERS DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-  )
-
-  install(
-    EXPORT volcanoTargets
-    NAMESPACE volcano::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/volcano
-  )
-
-  configure_package_config_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/volcanoConfig.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/volcanoConfig.cmake
-    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/volcano
-  )
-
-  write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/volcanoConfigVersion.cmake
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion
-  )
-
-  install(
-    FILES
-      ${CMAKE_CURRENT_BINARY_DIR}/volcanoConfig.cmake
-      ${CMAKE_CURRENT_BINARY_DIR}/volcanoConfigVersion.cmake
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/volcano
-  )
-endif()

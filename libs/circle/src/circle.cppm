@@ -1,4 +1,41 @@
-#include "volcano/mud/CircleAnsi.hpp"
+module;
+
+#include <cctype>
+#include <cstdlib>
+#include <string>
+#include <string_view>
+
+export module volcano.circle;
+
+export namespace volcano::mud::circle {
+
+    constexpr int COLOR_NORMAL = 0;
+    constexpr int COLOR_ROOMNAME = 1;
+    constexpr int COLOR_ROOMOBJS = 2;
+    constexpr int COLOR_ROOMPEOPLE = 3;
+    constexpr int COLOR_HITYOU = 4;
+    constexpr int COLOR_YOUHIT = 5;
+    constexpr int COLOR_OTHERHIT = 6;
+    constexpr int COLOR_CRITICAL = 7;
+    constexpr int COLOR_HOLLER = 8;
+    constexpr int COLOR_SHOUT = 9;
+    constexpr int COLOR_GOSSIP = 10;
+    constexpr int COLOR_AUCTION = 11;
+    constexpr int COLOR_CONGRAT = 12;
+    constexpr int COLOR_TELL = 13;
+    constexpr int COLOR_YOUSAY = 14;
+    constexpr int COLOR_ROOMSAY = 15;
+
+    int count_color_chars(std::string_view string);
+
+    std::string processColors(std::string_view txt, int parse, char** choices);
+    size_t countColors(std::string_view txt);
+
+    bool isColorChar(char c);
+
+} // namespace volcano::mud::circle
+
+namespace volcano::mud::circle {
 
 #define ANSISTART "\x1B["
 #define ANSISEP ';'
@@ -32,14 +69,10 @@
 #define AB_CYAN "46"
 #define AB_WHITE "47"
 
-namespace volcano::mud::circle
-{
-
-    namespace
-    {
+    namespace {
         const char RANDOM_COLORS[] = "bgcrmywBGCRMWY";
 
-        const char *ANSI[] = {
+        const char* ANSI[] = {
             "@",
             AA_NORMAL,
             AA_NORMAL ANSISEPSTR AF_BLACK,
@@ -76,7 +109,7 @@ namespace volcano::mud::circle
 
         constexpr int NUM_COLOR = 16;
 
-        const char *default_color_choices[NUM_COLOR + 1] = {
+        const char* default_color_choices[NUM_COLOR + 1] = {
             /* COLOR_NORMAL */ AA_NORMAL,
             /* COLOR_ROOMNAME */ AA_NORMAL ANSISEPSTR AF_CYAN,
             /* COLOR_ROOMOBJS */ AA_NORMAL ANSISEPSTR AF_GREEN,
@@ -94,26 +127,18 @@ namespace volcano::mud::circle
             /* COLOR_YOUSAY */ AA_NORMAL ANSISEPSTR AF_CYAN,
             /* COLOR_ROOMSAY */ AA_NORMAL ANSISEPSTR AF_WHITE,
             nullptr};
-    }
+    } // namespace
 
-    int count_color_chars(std::string_view string)
-    {
+    int count_color_chars(std::string_view string) {
         int num = 0;
 
-        for (size_t i = 0; i < string.size(); i++)
-        {
-            while (string[i] == '@')
-            {
-                if (string[i + 1] == '@')
-                {
+        for (size_t i = 0; i < string.size(); i++) {
+            while (string[i] == '@') {
+                if (string[i + 1] == '@') {
                     num++;
-                }
-                else if (string[i + 1] == '[')
-                {
+                } else if (string[i + 1] == '[') {
                     num += 4;
-                }
-                else
-                {
+                } else {
                     num += 2;
                 }
                 i += 2;
@@ -123,21 +148,18 @@ namespace volcano::mud::circle
     }
 
     // A C++ version of proc_color from comm.c. it returns the colored string.
-    std::string processColors(std::string_view txt, int parse, char **choices)
-    {
-        const char *color_char;
-        const char *replacement = nullptr;
+    std::string processColors(std::string_view txt, int parse, char** choices) {
+        const char* color_char;
+        const char* replacement = nullptr;
         int i, temp_color;
 
         if (txt.empty() || txt.find('@') == std::string_view::npos) /* skip out if no color codes     */
             return std::string(txt);
 
         std::string out;
-        for (size_t pos = 0; pos < txt.size();)
-        {
+        for (size_t pos = 0; pos < txt.size();) {
             /* no color code - just copy */
-            if (txt[pos] != '@')
-            {
+            if (txt[pos] != '@') {
                 out.push_back(txt[pos++]);
                 continue;
             }
@@ -145,8 +167,7 @@ namespace volcano::mud::circle
             /* if we get here we have a color code */
 
             pos++; /* now points to the code */
-            if (pos >= txt.size())
-            {
+            if (pos >= txt.size()) {
                 out.push_back('@');
                 break;
             }
@@ -154,20 +175,16 @@ namespace volcano::mud::circle
             char code = txt[pos];
 
             /* look for a random color code picks a random number between 1 and 14 */
-            if (code == 'x')
-            {
+            if (code == 'x') {
                 temp_color = (rand() % 14);
                 code = RANDOM_COLORS[temp_color];
             }
 
-            if (!parse)
-            { /* not parsing, just skip the code, unless it's @@ */
-                if (code == '@')
-                {
+            if (!parse) { /* not parsing, just skip the code, unless it's @@ */
+                if (code == '@') {
                     out.push_back('@');
                 }
-                if (code == '[')
-                { /* Multi-character code */
+                if (code == '[') { /* Multi-character code */
                     pos++;
                     while (pos < txt.size() && isdigit(static_cast<unsigned char>(txt[pos])))
                         pos++;
@@ -179,11 +196,9 @@ namespace volcano::mud::circle
             }
 
             /* parse the color code */
-            if (code == '[')
-            { /* User configurable color */
+            if (code == '[') { /* User configurable color */
                 pos++;
-                if (pos < txt.size())
-                {
+                if (pos < txt.size()) {
                     i = atoi(txt.data() + pos);
                     if (i < 0 || i >= NUM_COLOR)
                         i = COLOR_NORMAL;
@@ -195,26 +210,19 @@ namespace volcano::mud::circle
                     if (pos >= txt.size())
                         pos = txt.size() - 1;
                 }
-            }
-            else if (code == 'n')
-            {
+            } else if (code == 'n') {
                 replacement = default_color_choices[COLOR_NORMAL];
                 if (choices && choices[COLOR_NORMAL])
                     replacement = choices[COLOR_NORMAL];
-            }
-            else
-            {
-                for (i = 0; CCODE[i] != '!'; i++)
-                { /* do we find it ? */
-                    if (code == CCODE[i])
-                    { /* if so :*/
+            } else {
+                for (i = 0; CCODE[i] != '!'; i++) { /* do we find it ? */
+                    if (code == CCODE[i]) {        /* if so :*/
                         replacement = ANSI[i];
                         break;
                     }
                 }
             }
-            if (replacement)
-            {
+            if (replacement) {
                 if (isdigit(replacement[0]))
                     for (color_char = ANSISTART; *color_char;)
                         out.push_back(*color_char++);
@@ -235,16 +243,13 @@ namespace volcano::mud::circle
         return out;
     }
 
-    size_t countColors(std::string_view txt)
-    {
+    size_t countColors(std::string_view txt) {
         auto stripped = processColors(txt, false, nullptr);
         return txt.size() - stripped.size();
     }
 
-    bool isColorChar(char c)
-    {
-        switch (c)
-        {
+    bool isColorChar(char c) {
+        switch (c) {
         case 'n':
         case 'b':
         case 'B':
@@ -258,9 +263,8 @@ namespace volcano::mud::circle
         case 'Y':
         case 'w':
         case 'W':
-        case 'k':
-        case 'K':
         case '0':
+        case '1':
         case '2':
         case '3':
         case '4':
@@ -271,10 +275,12 @@ namespace volcano::mud::circle
         case 'u':
         case 'o':
         case 'e':
-            // case 'x':
+        case 'x':
+        case '@':
             return true;
         default:
             return false;
         }
     }
-}
+
+} // namespace volcano::mud::circle

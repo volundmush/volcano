@@ -43,4 +43,5 @@ target_link_libraries(volcano_telnet
     volcano::mud
     volcano::net
     volcano::zlib
+        volcano::client
 )

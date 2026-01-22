@@ -7,7 +7,7 @@
 
 namespace volcano::mud {
     class CommandData {
-    std::shared_ptr<const std::string> _original;
+    std::unique_ptr<const std::string> _original;
 
     public:
     CommandData() = default;

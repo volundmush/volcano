@@ -1,7 +1,50 @@
-#include "volcano/config/config.hpp"
-#include "volcano/dotenv/dotenv.hpp"
-#include "volcano/log/Log.hpp"
+module;
+
 #include <cstdlib>
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <volcano/net/net.hpp>
+
+export module volcano.config;
+
+export import volcano.dotenv;
+import volcano.log;
+
+export namespace volcano::config {
+
+    struct EndPointConfig {
+        boost::asio::ip::address address = boost::asio::ip::address_v6::any();
+        uint16_t port{0};
+    };
+
+    struct TlsContext {
+        std::filesystem::path cert_path;
+        std::filesystem::path key_path;
+    };
+
+    struct JwtSecret {
+        std::string secret;
+        int expiry_minutes{60};
+        int refresh_expiry_minutes{10080}; // 7 days
+        std::string issuer{"volcano-server"};
+        std::string audience{"volcano-client"};
+    };
+
+    struct Config {
+        EndPointConfig http;
+        EndPointConfig https;
+        EndPointConfig telnet;
+        EndPointConfig telnets;
+        TlsContext tls;
+        JwtSecret jwt;
+    };
+
+    Config init(std::string_view log_file);
+
+} // namespace volcano::config
 
 namespace volcano::config {
     Config init(std::string_view log_file) {
@@ -10,7 +53,7 @@ namespace volcano::config {
         volcano::log::init(log_options);
         volcano::dotenv::load_env_file(".env", false);
         volcano::dotenv::load_env_file(".env.local", true);
-    
+
         auto get_env = [](const char* key) -> const char* {
             const char* value = std::getenv(key);
             return (value && *value) ? value : nullptr;
