@@ -38,4 +38,5 @@ target_sources(volcano_web
 target_link_libraries(volcano_web
 PUBLIC
     volcano::net
+    nlohmann_json
 )

@@ -17,6 +17,15 @@ static HttpResponse make_response(const HttpRequest& req, HttpAnswer answer) {
 	return res;
 }
 
+std::expected<nlohmann::json, std::string> parse_json_body(HttpRequest& req) {
+	try {
+		auto json = nlohmann::json::parse(req.body());
+		return json;
+	} catch (const nlohmann::json::parse_error& e) {
+		return std::unexpected(std::string("Failed to parse JSON body: ") + e.what());
+	}
+}
+
 volcano::net::ClientHandler make_router_handler(std::shared_ptr<Router> router) {
 	return [router](volcano::net::AnyStream&& stream) -> boost::asio::awaitable<void> {
 		boost::beast::flat_buffer buffer;
