@@ -6,6 +6,8 @@
 #include <boost/beast/http.hpp>
 #include <boost/beast/websocket.hpp>
 
+#include "volcano/net/Connection.hpp"
+
 
 namespace volcano::web {
 
