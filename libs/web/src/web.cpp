@@ -85,11 +85,11 @@ volcano::net::ClientHandler make_router_handler(std::shared_ptr<Router> router) 
 				.hostname = stream.hostname(),
 				.address = stream.endpoint().address(),
 			};
-			
+
 			auto& node = *match->node;
 			auto params = std::move(match->params);
 
-			auto ctx = RequestContext{client_info, req, params, {}};
+			auto ctx = RequestContext{client_info, req, params, {}, nlohmann::json::object()};
 			ctx.query = boost::urls::url_view(req.target()).params();
 
 			if (boost::beast::websocket::is_upgrade(req)) {
@@ -101,9 +101,18 @@ volcano::net::ClientHandler make_router_handler(std::shared_ptr<Router> router) 
 					continue;
 				}
 
+				auto &ws_endpoint = ws_handler->get();
+				if (ws_endpoint.guard) {
+					if (auto guard_answer = co_await ws_endpoint.guard(stream, ctx); guard_answer) {
+						auto res = make_response(req, std::move(*guard_answer));
+						co_await http::async_write(stream, res, boost::asio::use_awaitable);
+						continue;
+					}
+				}
+
 				WebSocketStream ws(std::move(stream));
 				co_await ws.async_accept(req, boost::asio::use_awaitable);
-				co_await ws_handler->get()(ws, ctx);
+				co_await ws_endpoint.handler(ws, ctx);
 				co_return;
 			}
 
@@ -116,7 +125,16 @@ volcano::net::ClientHandler make_router_handler(std::shared_ptr<Router> router) 
 				continue;
 			}
 
-			auto answer = co_await handler->get()(stream, ctx);
+			auto &endpoint = handler->get();
+			if (endpoint.guard) {
+				if (auto guard_answer = co_await endpoint.guard(stream, ctx); guard_answer) {
+					auto res = make_response(req, std::move(*guard_answer));
+					co_await http::async_write(stream, res, boost::asio::use_awaitable);
+					continue;
+				}
+			}
+
+			auto answer = co_await endpoint.handler(stream, ctx);
 			auto res = make_response(req, std::move(answer));
 			co_await http::async_write(stream, res, boost::asio::use_awaitable);
 		}

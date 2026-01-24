@@ -22,7 +22,9 @@ namespace volcano::web {
 
         RouterRef add_router(std::string_view path);
         void add_request_handler(std::string_view path, http::verb verb, RequestHandler handler);
+        void add_request_handler(std::string_view path, http::verb verb, EndpointGuard guard, RequestHandler handler);
         void add_websocket_handler(std::string_view path, WebSocketHandler handler);
+        void add_websocket_handler(std::string_view path, EndpointGuard guard, WebSocketHandler handler);
         void register_parameter(std::string_view type, std::string_view pattern);
         void register_parameter(std::string_view type, std::function<bool(std::string_view)> validator);
 
@@ -33,8 +35,18 @@ namespace volcano::web {
 
         std::optional<MatchResult> match(std::string_view path) const;
         bool has_request_handlers() const;
-        std::optional<std::reference_wrapper<RequestHandler>> request_handler(http::verb verb);
-        std::optional<std::reference_wrapper<WebSocketHandler>> websocket_handler();
+        struct RequestEndpoint {
+            EndpointGuard guard;
+            RequestHandler handler;
+        };
+
+        struct WebSocketEndpoint {
+            EndpointGuard guard;
+            WebSocketHandler handler;
+        };
+
+        std::optional<std::reference_wrapper<RequestEndpoint>> request_handler(http::verb verb);
+        std::optional<std::reference_wrapper<WebSocketEndpoint>> websocket_handler();
 
     private:
         struct Segment {
@@ -62,8 +74,8 @@ namespace volcano::web {
 
         ChildMap static_children_;
         ChildMap param_children_;
-        std::unordered_map<http::verb, RequestHandler> request_handlers_;
-        std::optional<WebSocketHandler> websocket_handler_;
+        std::unordered_map<http::verb, RequestEndpoint> request_handlers_;
+        std::optional<WebSocketEndpoint> websocket_handler_;
         std::shared_ptr<Registry> registry_;
     };
 }

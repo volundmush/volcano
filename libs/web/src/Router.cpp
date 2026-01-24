@@ -142,7 +142,7 @@ bool Router::has_request_handlers() const {
     return !request_handlers_.empty();
 }
 
-std::optional<std::reference_wrapper<RequestHandler>> Router::request_handler(http::verb verb) {
+std::optional<std::reference_wrapper<Router::RequestEndpoint>> Router::request_handler(http::verb verb) {
     auto it = request_handlers_.find(verb);
     if (it == request_handlers_.end()) {
         return std::nullopt;
@@ -150,7 +150,7 @@ std::optional<std::reference_wrapper<RequestHandler>> Router::request_handler(ht
     return it->second;
 }
 
-std::optional<std::reference_wrapper<WebSocketHandler>> Router::websocket_handler() {
+std::optional<std::reference_wrapper<Router::WebSocketEndpoint>> Router::websocket_handler() {
     if (!websocket_handler_) {
         return std::nullopt;
     }
@@ -162,20 +162,28 @@ auto Router::add_router(std::string_view path) -> RouterRef {
 }
 
 void Router::add_request_handler(std::string_view path, http::verb verb, RequestHandler handler) {
+    add_request_handler(path, verb, EndpointGuard{}, std::move(handler));
+}
+
+void Router::add_request_handler(std::string_view path, http::verb verb, EndpointGuard guard, RequestHandler handler) {
     auto& router = get_or_create(path).get();
-    auto [it, inserted] = router.request_handlers_.emplace(verb, std::move(handler));
+    auto [it, inserted] = router.request_handlers_.emplace(verb, RequestEndpoint{std::move(guard), std::move(handler)});
     if (!inserted) {
         throw std::runtime_error("Request handler already registered for this verb.");
     }
 }
 
 void Router::add_websocket_handler(std::string_view path, WebSocketHandler handler) {
+    add_websocket_handler(path, EndpointGuard{}, std::move(handler));
+}
+
+void Router::add_websocket_handler(std::string_view path, EndpointGuard guard, WebSocketHandler handler) {
     auto& router = get_or_create(path).get();
     if (router.websocket_handler_) {
         throw std::runtime_error("WebSocket handler already registered for this path.");
     }
 
-    router.websocket_handler_ = std::move(handler);
+    router.websocket_handler_ = WebSocketEndpoint{std::move(guard), std::move(handler)};
 }
 
 void Router::register_parameter(std::string_view type, std::string_view pattern) {

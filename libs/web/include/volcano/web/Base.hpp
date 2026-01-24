@@ -7,6 +7,8 @@
 #include <string_view>
 #include <unordered_map>
 
+#include <nlohmann/json.hpp>
+
 #include <boost/beast/core.hpp>
 #include <boost/beast/websocket.hpp>
 #include <boost/url.hpp>
@@ -38,8 +40,10 @@ namespace volcano::web
         HttpRequest& request;
         Parameters& params;
         boost::urls::params_view query;
+        nlohmann::json user_data;
     };
 
+    using EndpointGuard = std::function<boost::asio::awaitable<std::optional<HttpAnswer>>(volcano::net::AnyStream &, RequestContext&)>;
     using RequestHandler = std::function<boost::asio::awaitable<HttpAnswer>(volcano::net::AnyStream &, RequestContext&)>;
     using WebSocketHandler = std::function<boost::asio::awaitable<void>(WebSocketStream&, RequestContext&)>;
 
