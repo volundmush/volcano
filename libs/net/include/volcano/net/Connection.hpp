@@ -7,6 +7,7 @@
 
 #include "Base.hpp"
 #include <boost/asio/ssl.hpp>
+#include <boost/beast/websocket/teardown.hpp>
 
 namespace boost::asio::ip {
     inline auto format_as(const address& address) {
@@ -121,9 +122,18 @@ namespace volcano::net {
         }
 }
 
-namespace boost::beast {
-inline void beast_close_socket(volcano::net::AnyStream& stream) {
-    boost::system::error_code ec;
-    stream.lowest_layer().close(ec);
-}
+namespace boost::beast::websocket {
+    inline void teardown(role_type, volcano::net::AnyStream& stream, boost::system::error_code& ec) {
+        stream.lowest_layer().close(ec);
+    }
+
+    template <class TeardownHandler>
+    void async_teardown(role_type, volcano::net::AnyStream& stream, TeardownHandler&& handler) {
+        boost::system::error_code ec;
+        stream.lowest_layer().close(ec);
+        boost::asio::post(stream.get_executor(),
+                          [handler = std::forward<TeardownHandler>(handler), ec]() mutable {
+                              handler(ec);
+                          });
+    }
 }
