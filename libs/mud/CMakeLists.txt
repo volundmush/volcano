@@ -15,8 +15,16 @@ file(GLOB_RECURSE SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
 )
 
+list(REMOVE_ITEM SRC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/CircleAnsi.cpp
+)
+
 file(GLOB_RECURSE INCLUDE
     ${CMAKE_CURRENT_SOURCE_DIR}/include/volcano/mud/*.hpp
+)
+
+list(REMOVE_ITEM INCLUDE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/volcano/mud/CircleAnsi.hpp
 )
 
 target_precompile_headers(volcano_mud

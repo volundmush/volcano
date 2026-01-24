@@ -65,6 +65,7 @@ add_subdirectory(libs/net)
 add_subdirectory(libs/log)
 add_subdirectory(libs/web)
 add_subdirectory(libs/mud)
+add_subdirectory(libs/circle)
 add_subdirectory(libs/telnet)
 add_subdirectory(libs/config)
 
@@ -78,6 +79,7 @@ set(VOLCANO_TARGETS
   volcano_log
   volcano_web
   volcano_mud
+  volcano_circle
   volcano_telnet
   volcano_config
 )
