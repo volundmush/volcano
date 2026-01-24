@@ -1,5 +1,6 @@
 #pragma once
 #include "volcano/net/Server.hpp"
+#include "volcano/jwt/jwt.hpp"
 
 #include <expected>
 #include <string>
@@ -26,8 +27,14 @@ namespace volcano::web
 
     using Parameters = std::unordered_map<std::string, std::string>;
 
+    struct ClientInfo {
+        std::string hostname;
+        boost::asio::ip::address address;
+    };
+
     struct RequestContext
     {
+        ClientInfo client;
         HttpRequest& request;
         Parameters& params;
         boost::urls::params_view query;
@@ -36,5 +43,5 @@ namespace volcano::web
     using RequestHandler = std::function<boost::asio::awaitable<HttpAnswer>(volcano::net::AnyStream &, RequestContext&)>;
     using WebSocketHandler = std::function<boost::asio::awaitable<void>(WebSocketStream&, RequestContext&)>;
 
-    
+    std::expected<nlohmann::json, HttpAnswer> authorize_bearer(HttpRequest& req, const volcano::jwt::JwtContext& jwt_ctx);
 }

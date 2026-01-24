@@ -88,14 +88,14 @@ namespace volcano::net
         for (;;)
         {
             boost::system::error_code ec;
-            auto socket = co_await acceptor.async_accept(boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+            auto strand = boost::asio::make_strand(context());
+            auto socket = co_await acceptor.async_accept(strand, boost::asio::redirect_error(boost::asio::use_awaitable, ec));
             if (ec)
             {
                 LERROR("Accept error: {}", ec.message());
                 continue;
             }
             const int64_t connection_id = connection_id_seed.fetch_add(1, std::memory_order_relaxed);
-            auto strand = boost::asio::make_strand(context());
             boost::asio::co_spawn(strand,
                                   accept_client(std::move(socket), connection_id),
                                   boost::asio::detached);

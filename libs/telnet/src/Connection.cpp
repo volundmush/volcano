@@ -8,6 +8,7 @@
 #include <span>
 
 #include <boost/beast/core/flat_buffer.hpp>
+#include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/steady_timer.hpp>
 
@@ -160,8 +161,6 @@ namespace volcano::telnet {
                 out.push_back(m.command);
             } else if constexpr (std::is_same_v<T, TelnetMessageSubnegotiation>) {
                 append_subnegotiation(out, m.option, m.data);
-            } else if constexpr (std::is_same_v<T, TelnetError>) {
-                out.clear();
             }
 
             return out;
@@ -224,10 +223,20 @@ namespace volcano::telnet {
                 auto prepared = buffer.prepare(4096);
                 std::size_t read_bytes = co_await conn_.async_read_some(
                     prepared,
-                    boost::asio::redirect_error(boost::asio::use_awaitable, read_ec));
+                    boost::asio::bind_cancellation_slot(
+                        cancellation_signal_.slot(),
+                        boost::asio::redirect_error(boost::asio::use_awaitable, read_ec)));
                 if(read_ec) {
-                    // TODO: proper error handling
+                    if(read_ec == boost::asio::error::operation_aborted) {
+                        co_return;
+                    }
                     LINFO("TelnetConnection read error with {}: {}", *this, read_ec.message());
+                    boost::system::error_code send_ec;
+                    co_await to_game_messages_.async_send(send_ec, TelnetDisconnect{}, boost::asio::use_awaitable);
+                    if(send_ec) {
+                        LERROR("{} to_game channel error: {}", *this, send_ec.message());
+                    }
+                    signalShutdown(TelnetShutdownReason::client_disconnect);
                     co_return;
                 }
                 buffer.commit(read_bytes);
@@ -285,6 +294,7 @@ namespace volcano::telnet {
             }
         } catch(boost::system::system_error& e) {
               LERROR("{} reader encountered an error: {}", conn_, e.what());
+              signalShutdown(TelnetShutdownReason::error);
         }
 
         co_return;
@@ -299,14 +309,26 @@ namespace volcano::telnet {
             for(;;) {
                 boost::system::error_code ec;
                 auto msg = co_await outgoing_messages_.async_receive(
-                    boost::asio::redirect_error(boost::asio::use_awaitable, ec)
+                    boost::asio::bind_cancellation_slot(
+                        cancellation_signal_.slot(),
+                        boost::asio::redirect_error(boost::asio::use_awaitable, ec))
                 );
                 if(ec) {
+                    if(ec == boost::asio::error::operation_aborted) {
+                        co_return;
+                    }
                     LERROR("{} write channel error with: {}", *this, ec.message());
+                    signalShutdown(TelnetShutdownReason::error);
                     co_return;
                 }
 
-                auto encoded = encodeTelnetMessage(msg);
+                if(std::holds_alternative<TelnetDisconnect>(msg)) {
+                    signalShutdown(TelnetShutdownReason::remote_disconnect);
+                    co_return;
+                }
+
+                auto &telnet_msg = std::get<TelnetMessage>(msg);
+                auto encoded = encodeTelnetMessage(telnet_msg);
                 if(encoded.empty()) {
                     continue;
                 }
@@ -336,14 +358,20 @@ namespace volcano::telnet {
                 co_await boost::asio::async_write(
                     conn_,
                     use_buffer,
-                    boost::asio::redirect_error(boost::asio::use_awaitable, write_ec));
+                    boost::asio::bind_cancellation_slot(
+                        cancellation_signal_.slot(),
+                        boost::asio::redirect_error(boost::asio::use_awaitable, write_ec)));
                 if(write_ec) {
+                    if(write_ec == boost::asio::error::operation_aborted) {
+                        co_return;
+                    }
                     LERROR("{} write error with: {}", *this, write_ec.message());
+                    signalShutdown(TelnetShutdownReason::error);
                     co_return;
                 }
 
-                if(std::holds_alternative<TelnetMessageSubnegotiation>(msg)) {
-                    auto& sub = std::get<TelnetMessageSubnegotiation>(msg);
+                if(std::holds_alternative<TelnetMessageSubnegotiation>(telnet_msg)) {
+                    auto& sub = std::get<TelnetMessageSubnegotiation>(telnet_msg);
                     if(sub.option == codes::MCCP2) {
                         compressing = true;
                         nlohmann::json capabilities;
@@ -355,6 +383,7 @@ namespace volcano::telnet {
             }
         } catch(const boost::system::system_error& e) {
               LERROR("{} writer encountered an error: {}", *this, e.what());
+              signalShutdown(TelnetShutdownReason::error);
         }
 
         co_return;
@@ -362,6 +391,14 @@ namespace volcano::telnet {
 
     void TelnetConnection::requestAbort() {
         abort_requested_.store(true, std::memory_order_relaxed);
+        signalShutdown(TelnetShutdownReason::aborted);
+    }
+
+    void TelnetConnection::signalShutdown(TelnetShutdownReason reason) {
+        TelnetShutdownReason expected = TelnetShutdownReason::unknown;
+        if(shutdown_reason_.compare_exchange_strong(expected, reason)) {
+            cancellation_signal_.emit(boost::asio::cancellation_type::all);
+        }
     }
 
     boost::asio::awaitable<void> TelnetConnection::negotiateOptions(boost::asio::steady_timer::duration negotiation_timeout) {
@@ -404,32 +441,58 @@ namespace volcano::telnet {
         co_return;
     }
 
-    boost::asio::awaitable<void> TelnetConnection::run() {
+    boost::asio::awaitable<TelnetShutdownReason> TelnetConnection::runTelnet() {
         using namespace boost::asio::experimental::awaitable_operators;
 
+        shutdown_reason_.store(TelnetShutdownReason::unknown, std::memory_order_relaxed);
+
+        // first start all options. this will send initial negotiation messages as needed.
         for(auto& [code, option] : options_) {
             co_await option->start();
         }
 
-        co_await (runReader() || runWriter());
+        auto r = runReader();
+        auto w = runWriter();
+        auto k = runKeepAlive();
 
-        co_return;
+        co_await (std::move(r) || std::move(w) || std::move(k));
+
+        co_return shutdown_reason_.load(std::memory_order_relaxed);
+    }
+
+    boost::asio::awaitable<TelnetShutdownReason> TelnetConnection::run() {
+        // we'll use runTelnet() on conn's executor but await it here.
+        // This ensures that the strand only cares about reading and writing and the two channels.
+        // (and the keepalive.)
+        auto exec = conn_.get_executor();
+        co_return co_await boost::asio::co_spawn(
+            exec,
+            [this]() -> boost::asio::awaitable<TelnetShutdownReason> {
+                co_return co_await runTelnet();
+            },
+            boost::asio::use_awaitable
+        );
     }
 
     boost::asio::awaitable<void> TelnetConnection::sendToClient(const TelnetFromGameMessage& msg) {
-        TelnetMessage telnet_msg;
-        if(std::holds_alternative<TelnetMessageData>(msg)) {
-            TelnetMessageData data_msg = std::get<TelnetMessageData>(msg);
-            telnet_msg = data_msg;
-        } else if(std::holds_alternative<TelnetMessageGMCP>(msg)) {
-            TelnetMessageGMCP gmcp_msg = std::get<TelnetMessageGMCP>(msg);
-            telnet_msg = gmcp_msg.toSubnegotiation();
-        } else if(std::holds_alternative<TelnetMessageMSSP>(msg)) {
-            TelnetMessageMSSP mssp_msg = std::get<TelnetMessageMSSP>(msg);
-            telnet_msg = mssp_msg.toSubnegotiation();
+        TelnetOutgoingMessage telnet_msg;
+        if(std::holds_alternative<TelnetDisconnect>(msg)) {
+            telnet_msg = TelnetDisconnect{};
         } else {
-            LERROR("{} sendToClient received unknown message variant.", *this);
-            co_return;
+            const auto &client_msg = std::get<TelnetClientMessage>(msg);
+            if(std::holds_alternative<TelnetMessageData>(client_msg)) {
+                TelnetMessageData data_msg = std::get<TelnetMessageData>(client_msg);
+                telnet_msg = TelnetMessage{data_msg};
+            } else if(std::holds_alternative<TelnetMessageGMCP>(client_msg)) {
+                TelnetMessageGMCP gmcp_msg = std::get<TelnetMessageGMCP>(client_msg);
+                telnet_msg = TelnetMessage{gmcp_msg.toSubnegotiation()};
+            } else if(std::holds_alternative<TelnetMessageMSSP>(client_msg)) {
+                TelnetMessageMSSP mssp_msg = std::get<TelnetMessageMSSP>(client_msg);
+                telnet_msg = TelnetMessage{mssp_msg.toSubnegotiation()};
+            } else {
+                LERROR("{} sendToClient received unknown message variant.", *this);
+                co_return;
+            }
         }
         
         boost::system::error_code ec;
@@ -535,7 +598,7 @@ namespace volcano::telnet {
 
     boost::asio::awaitable<void> TelnetConnection::sendAppData(std::string_view app_data) {
         boost::system::error_code ec;
-        co_await outgoing_messages_.async_send(ec, TelnetMessageData{std::string(app_data)}, boost::asio::use_awaitable);
+        co_await outgoing_messages_.async_send(ec, TelnetMessage{TelnetMessageData{std::string(app_data)}}, boost::asio::use_awaitable);
         if(ec) {
             LERROR("{} outgoing channel error: {}", *this, ec.message());
         }
@@ -544,7 +607,7 @@ namespace volcano::telnet {
 
     boost::asio::awaitable<void> TelnetConnection::sendSubNegotiation(char option, std::string_view sub_data) {
         boost::system::error_code ec;
-        co_await outgoing_messages_.async_send(ec, TelnetMessageSubnegotiation{option, std::string(sub_data)}, boost::asio::use_awaitable);
+        co_await outgoing_messages_.async_send(ec, TelnetMessage{TelnetMessageSubnegotiation{option, std::string(sub_data)}}, boost::asio::use_awaitable);
         if(ec) {
             LERROR("{} outgoing channel error: {}", *this, ec.message());
         }
@@ -553,7 +616,7 @@ namespace volcano::telnet {
 
     boost::asio::awaitable<void> TelnetConnection::sendNegotiation(char command, char option) {
         boost::system::error_code ec;
-        co_await outgoing_messages_.async_send(ec, TelnetMessageNegotiation{command, option}, boost::asio::use_awaitable);
+        co_await outgoing_messages_.async_send(ec, TelnetMessage{TelnetMessageNegotiation{command, option}}, boost::asio::use_awaitable);
         if(ec) {
             LERROR("{} outgoing channel error: {}", *this, ec.message());
         }
@@ -562,7 +625,7 @@ namespace volcano::telnet {
 
     boost::asio::awaitable<void> TelnetConnection::sendCommand(char command) {
         boost::system::error_code ec;
-        co_await outgoing_messages_.async_send(ec, TelnetMessageCommand{command}, boost::asio::use_awaitable);
+        co_await outgoing_messages_.async_send(ec, TelnetMessage{TelnetMessageCommand{command}}, boost::asio::use_awaitable);
         if(ec) {
             LERROR("{} outgoing channel error: {}", *this, ec.message());
         }
@@ -576,9 +639,16 @@ namespace volcano::telnet {
             while(true) {
                 keepalive_timer.expires_after(std::chrono::seconds(30));
                 boost::system::error_code timer_ec;
-                co_await keepalive_timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, timer_ec));
+                co_await keepalive_timer.async_wait(
+                    boost::asio::bind_cancellation_slot(
+                        cancellation_signal_.slot(),
+                        boost::asio::redirect_error(boost::asio::use_awaitable, timer_ec)));
                 if(timer_ec) {
+                    if(timer_ec == boost::asio::error::operation_aborted) {
+                        co_return;
+                    }
                     LERROR("{} keepalive timer error: {}", *this, timer_ec.message());
+                    signalShutdown(TelnetShutdownReason::error);
                     co_return;
                 }
 
@@ -588,6 +658,7 @@ namespace volcano::telnet {
             }
         } catch(const boost::system::system_error& e) {
               LERROR("{} keepalive encountered an error: {}", *this, e.what());
+              signalShutdown(TelnetShutdownReason::error);
         }
 
         co_return;

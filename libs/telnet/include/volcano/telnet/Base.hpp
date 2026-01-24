@@ -37,7 +37,7 @@ namespace volcano::telnet {
         constexpr char AYT = static_cast<char>(246);
 
         // Telnet Options
-        constexpr char MTTS = static_cast<char>(24);
+        constexpr char MTTS          = static_cast<char>(24);
         constexpr char TELOPT_EOR     = static_cast<char>(25);
         constexpr char NAWS          = static_cast<char>(31);
         constexpr char LINEMODE      = static_cast<char>(34);
@@ -46,7 +46,6 @@ namespace volcano::telnet {
         constexpr char MSSP          = static_cast<char>(70);
         constexpr char MCCP2         = static_cast<char>(86);
         constexpr char MCCP3         = static_cast<char>(87);
-        constexpr char MXP          = static_cast<char>(91);
         constexpr char GMCP          = static_cast<char>(201);
     }
 
@@ -82,16 +81,25 @@ namespace volcano::telnet {
     struct TelnetChangeCapabilities {
         nlohmann::json capabilities;
     };
-
-    struct TelnetError {
-        std::string message;
-    };
     
     using TelnetMessage = std::variant<TelnetMessageData, TelnetMessageSubnegotiation, 
-        TelnetMessageNegotiation, TelnetMessageCommand, TelnetMessageGMCP, TelnetError>;
+        TelnetMessageNegotiation, TelnetMessageCommand, TelnetMessageGMCP>;
     
-    using TelnetToGameMessage = std::variant<TelnetMessageData, TelnetMessageGMCP, TelnetChangeCapabilities>;
-    using TelnetFromGameMessage = std::variant<TelnetMessageData, TelnetMessageGMCP, TelnetMessageMSSP>;
+    using TelnetGameMessage = std::variant<TelnetMessageData, TelnetMessageGMCP, TelnetChangeCapabilities>;
+    using TelnetClientMessage = std::variant<TelnetMessageData, TelnetMessageGMCP, TelnetMessageMSSP>;
+
+    struct TelnetDisconnect {};
+    enum class TelnetShutdownReason {
+        unknown,
+        client_disconnect,
+        remote_disconnect,
+        aborted,
+        error,
+    };
+
+    using TelnetOutgoingMessage = std::variant<TelnetMessage, TelnetDisconnect>;
+    using TelnetToGameMessage = std::variant<TelnetGameMessage, TelnetDisconnect>;
+    using TelnetFromGameMessage = std::variant<TelnetClientMessage, TelnetDisconnect>;
 
     class TelnetConnection;
     class TelnetOption;

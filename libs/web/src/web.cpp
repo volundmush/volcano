@@ -1,5 +1,6 @@
 #include <volcano/web/web.hpp>
 
+#include <boost/algorithm/string.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/beast/http.hpp>
@@ -24,6 +25,27 @@ std::expected<nlohmann::json, std::string> parse_json_body(HttpRequest& req) {
 	} catch (const nlohmann::json::parse_error& e) {
 		return std::unexpected(std::string("Failed to parse JSON body: ") + e.what());
 	}
+}
+
+std::expected<nlohmann::json, HttpAnswer> authorize_bearer(HttpRequest& req, const volcano::jwt::JwtContext& jwt_ctx) {
+	auto auth_it = req.find(http::field::authorization);
+	if (auth_it == req.end()) {
+		return std::unexpected(HttpAnswer{http::status::unauthorized, "Authorization header missing"});
+	}
+
+	std::string_view auth_value = auth_it->value();
+	const std::string_view bearer_prefix = "Bearer ";
+	if (!boost::algorithm::istarts_with(auth_value, bearer_prefix)) {
+		return std::unexpected(HttpAnswer{http::status::unauthorized, "Invalid authorization scheme"});
+	}
+
+	std::string_view token = auth_value.substr(bearer_prefix.size());
+	auto verify_result = jwt_ctx.verify(token);
+	if (!verify_result) {
+		return std::unexpected(HttpAnswer{http::status::unauthorized, "Token verification failed: " + verify_result.error()});
+	}
+
+	return *verify_result;
 }
 
 volcano::net::ClientHandler make_router_handler(std::shared_ptr<Router> router) {
@@ -59,10 +81,15 @@ volcano::net::ClientHandler make_router_handler(std::shared_ptr<Router> router) 
 				continue;
 			}
 
+			ClientInfo client_info{
+				.hostname = stream.hostname(),
+				.address = stream.endpoint().address(),
+			};
+			
 			auto& node = *match->node;
 			auto params = std::move(match->params);
 
-			auto ctx = RequestContext{req, params, {}};
+			auto ctx = RequestContext{client_info, req, params, {}};
 			ctx.query = boost::urls::url_view(req.target()).params();
 
 			if (boost::beast::websocket::is_upgrade(req)) {

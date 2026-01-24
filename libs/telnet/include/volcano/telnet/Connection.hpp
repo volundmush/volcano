@@ -12,7 +12,7 @@ namespace volcano::telnet {
         public:
         TelnetConnection(volcano::net::AnyStream connection);
         
-        boost::asio::awaitable<void> run();
+        boost::asio::awaitable<TelnetShutdownReason> run();
         boost::asio::awaitable<void> negotiateOptions(boost::asio::steady_timer::duration negotiation_timeout);
         void requestAbort();
 
@@ -30,15 +30,19 @@ namespace volcano::telnet {
         volcano::net::AnyStream conn_;
         volcano::mud::ClientData client_data_;
         std::vector<std::shared_ptr<Channel<bool>>> pending_channels_;
-        Channel<TelnetMessage> outgoing_messages_;
+        Channel<TelnetOutgoingMessage> outgoing_messages_;
         Channel<TelnetToGameMessage> to_game_messages_;
         std::atomic_bool abort_requested_{false};
+        std::atomic<TelnetShutdownReason> shutdown_reason_{TelnetShutdownReason::unknown};
         std::string append_data_buffer_;
         bool telnet_mode{false};
-        
+        boost::asio::cancellation_signal cancellation_signal_;
+
+        boost::asio::awaitable<TelnetShutdownReason> runTelnet();
         boost::asio::awaitable<void> runReader();
         boost::asio::awaitable<void> runWriter();
         boost::asio::awaitable<void> runKeepAlive();
+        void signalShutdown(TelnetShutdownReason reason);
         
         boost::asio::awaitable<void> processData(TelnetMessage& data);
 
