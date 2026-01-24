@@ -69,7 +69,7 @@ namespace volcano::web {
         static std::vector<std::string_view> split_path(std::string_view path);
         static std::pair<std::string, std::string> parse_param_key(std::string_view key);
 
-        RouterRef get_or_create(std::string_view path);
+        Router& get_or_create(std::string_view path);
 
         ChildMap static_children_;
         ChildMap param_children_;

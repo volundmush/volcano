@@ -170,7 +170,7 @@ void Router::add_request_handler(std::string_view path, http::verb verb, Request
 }
 
 void Router::add_request_handler(std::string_view path, http::verb verb, EndpointGuard guard, RequestHandler handler) {
-    auto& router = get_or_create(path).get();
+    auto& router = get_or_create(path);
     auto [it, inserted] = router.request_handlers_.emplace(verb, RequestEndpoint{std::move(guard), std::move(handler)});
     if (!inserted) {
         throw std::runtime_error("Request handler already registered for this verb.");
@@ -182,7 +182,7 @@ void Router::add_websocket_handler(std::string_view path, WebSocketHandler handl
 }
 
 void Router::add_websocket_handler(std::string_view path, EndpointGuard guard, WebSocketHandler handler) {
-    auto& router = get_or_create(path).get();
+    auto& router = get_or_create(path);
     if (router.websocket_handler_) {
         throw std::runtime_error("WebSocket handler already registered for this path.");
     }
