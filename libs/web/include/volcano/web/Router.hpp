@@ -18,9 +18,8 @@ namespace volcano::web {
     class Router {
     public:
         Router();
-        using RouterRef = std::reference_wrapper<Router>;
 
-        RouterRef add_router(std::string_view path);
+        Router& add_router(std::string_view path);
         void add_request_handler(std::string_view path, http::verb verb, RequestHandler handler);
         void add_request_handler(std::string_view path, http::verb verb, EndpointGuard guard, RequestHandler handler);
         void add_websocket_handler(std::string_view path, WebSocketHandler handler);

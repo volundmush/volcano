@@ -61,9 +61,9 @@ std::pair<std::string, std::string> Router::parse_param_key(std::string_view key
     return {std::move(type), std::move(name)};
 }
 
-auto Router::get_or_create(std::string_view path) -> RouterRef {
+Router& Router::get_or_create(std::string_view path) {
     if (path.empty() || path == "/") {
-        return RouterRef{*this};
+        return *this;
     }
 
     Router* current = this;
@@ -85,7 +85,11 @@ auto Router::get_or_create(std::string_view path) -> RouterRef {
         current = it->second.get();
     }
 
-    return RouterRef{*current};
+    if(!current) {
+        throw std::runtime_error("Failed to create or retrieve router for path.");
+    }
+
+    return *current;
 }
 
 std::optional<Router::MatchResult> Router::match(std::string_view path) const {
@@ -157,7 +161,7 @@ std::optional<std::reference_wrapper<Router::WebSocketEndpoint>> Router::websock
     return *websocket_handler_;
 }
 
-auto Router::add_router(std::string_view path) -> RouterRef {
+Router& Router::add_router(std::string_view path) {
     return get_or_create(path);
 }
 
