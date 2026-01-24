@@ -6,6 +6,7 @@
 #include "PartialMatch.hpp"
 
 #include <enchantum/enchantum.hpp>
+#include <fmt/format.h>
 
 namespace volcano::util
 {

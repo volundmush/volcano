@@ -37,4 +37,5 @@ target_sources(volcano_util
 target_link_libraries(volcano_util
     PUBLIC
         enchantum::enchantum
+        fmt::fmt
 )
