@@ -46,4 +46,21 @@ namespace volcano::net {
             return std::unexpected(std::string("Failed to initialize TLS context: ") + e.what());
         }
     }
+
+    void run(int numThreads) {
+        // the default argument for numThreads is std::thread::hardware_concurrency()
+        // the actual thread count will be at least 1, but that's the main thread which
+        // will also run the io_context, so we need to create at most numThreads - 1 additional threads
+        // all will run context().run()
+        std::vector<std::thread> threads;
+        for(int i = 1; i < numThreads; ++i) {
+            threads.emplace_back([](){
+                context().run();
+            });
+        }
+        context().run();
+        for(auto& thread : threads) {
+            thread.join();
+        }
+    }
 }
