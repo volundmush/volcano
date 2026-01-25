@@ -1,7 +1,9 @@
 #include "volcano/config/config.hpp"
 #include "volcano/dotenv/dotenv.hpp"
 #include "volcano/log/Log.hpp"
+#include "volcano/net/net.hpp"
 #include <cstdlib>
+#include <stdexcept>
 
 namespace volcano::config {
     Config init(std::string_view log_file) {
@@ -25,36 +27,37 @@ namespace volcano::config {
             if (end != value && parsed > 0 && parsed <= 65535) {
                 return static_cast<uint16_t>(parsed);
             }
-            LERROR("Invalid %s: %s", std::string(label).c_str(), value);
-            return std::nullopt;
+            throw std::runtime_error(std::string("Invalid ") + std::string(label) + ": " + value);
+        };
+
+        auto parse_address_env = [&](const char* key, auto& out) {
+            if (const char* host = get_env(key)) {
+                auto parsed = volcano::net::parse_address(host);
+                if (!parsed) {
+                    throw std::runtime_error(std::string("Invalid ") + key + ": " + host);
+                }
+                out = *parsed;
+            }
         };
 
         Config cfg{};
 
-        if (const char* host = get_env("HTTP_HOST")) {
-            cfg.http.address = boost::asio::ip::make_address(host);
-        }
+        parse_address_env("HTTP_HOST", cfg.http.address);
         if (auto port = parse_port(get_env("HTTP_PORT"), "HTTP_PORT")) {
             cfg.http.port = *port;
         }
 
-        if (const char* host = get_env("HTTPS_HOST")) {
-            cfg.https.address = boost::asio::ip::make_address(host);
-        }
+        parse_address_env("HTTPS_HOST", cfg.https.address);
         if (auto port = parse_port(get_env("HTTPS_PORT"), "HTTPS_PORT")) {
             cfg.https.port = *port;
         }
 
-        if (const char* host = get_env("TELNET_HOST")) {
-            cfg.telnet.address = boost::asio::ip::make_address(host);
-        }
+        parse_address_env("TELNET_HOST", cfg.telnet.address);
         if (auto port = parse_port(get_env("TELNET_PORT"), "TELNET_PORT")) {
             cfg.telnet.port = *port;
         }
 
-        if (const char* host = get_env("TELNETS_HOST")) {
-            cfg.telnets.address = boost::asio::ip::make_address(host);
-        }
+        parse_address_env("TELNETS_HOST", cfg.telnets.address);
         if (auto port = parse_port(get_env("TELNETS_PORT"), "TELNETS_PORT")) {
             cfg.telnets.port = *port;
         }
@@ -75,7 +78,7 @@ namespace volcano::config {
             if (end != exp && value > 0) {
                 cfg.jwt.expiry_minutes = static_cast<int>(value);
             } else {
-                LERROR("Invalid JWT_EXPIRY_MINUTES: %s", exp);
+                throw std::runtime_error(std::string("Invalid JWT_EXPIRY_MINUTES: ") + exp);
             }
         }
         if (const char* exp = get_env("JWT_REFRESH_EXPIRY_MINUTES")) {
@@ -84,7 +87,7 @@ namespace volcano::config {
             if (end != exp && value > 0) {
                 cfg.jwt.refresh_expiry_minutes = static_cast<int>(value);
             } else {
-                LERROR("Invalid JWT_REFRESH_EXPIRY_MINUTES: %s", exp);
+                throw std::runtime_error(std::string("Invalid JWT_REFRESH_EXPIRY_MINUTES: ") + exp);
             }
         }
         if (const char* iss = get_env("JWT_ISSUER")) {
