@@ -36,11 +36,19 @@ namespace volcano::net
     static std::atomic<int64_t> connection_id_seed{1};
 
     Server::Server(boost::asio::ip::tcp::acceptor acc, std::shared_ptr<boost::asio::ssl::context> tls_ctx, ClientHandler handler)
-        : acceptor(std::move(acc)), tls_context(std::move(tls_ctx)), handle_client(std::move(handler)) {}
+        : acceptor(std::move(acc)), tls_context(std::move(tls_ctx)), handle_client(std::move(handler)) {
+            if(!handler) {
+                throw std::invalid_argument("Client handler cannot be null");
+            }
+        }
 
     Server::Server(boost::asio::ip::address address, uint16_t port, std::shared_ptr<boost::asio::ssl::context> tls_ctx, ClientHandler handler)
         : acceptor(boost::asio::make_strand(context()), boost::asio::ip::tcp::endpoint(address, port)),
-          tls_context(std::move(tls_ctx)), handle_client(std::move(handler)) {}
+          tls_context(std::move(tls_ctx)), handle_client(std::move(handler)) {
+            if(!handler) {
+                throw std::invalid_argument("Client handler cannot be null");
+            }
+          }
 
     boost::asio::awaitable<void> Server::accept_client(TcpStream socket, int64_t connection_id)
     {
@@ -83,7 +91,7 @@ namespace volcano::net
         }
     }
 
-    boost::asio::awaitable<void> Server::accept_loop()
+    boost::asio::awaitable<void> Server::run()
     {
         for (;;)
         {
@@ -101,20 +109,6 @@ namespace volcano::net
                                   boost::asio::detached);
         }
         co_return;
-    }
-
-    void Server::run()
-    {
-        if (!handle_client)
-        {
-            LERROR("Server has no client handler defined; cannot run.");
-            return;
-        }
-        auto exec = acceptor.get_executor();
-        LINFO("{} Server listening on {}:{}", tls_context ? "TLS" : "TCP", acceptor.local_endpoint().address().to_string(), acceptor.local_endpoint().port());
-        boost::asio::co_spawn(exec,
-                              accept_loop(),
-                              boost::asio::detached);
     }
 
 } // namespace vol::net

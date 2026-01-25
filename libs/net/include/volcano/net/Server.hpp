@@ -18,14 +18,13 @@ namespace volcano::net {
         
         Server(boost::asio::ip::address address, uint16_t port, std::shared_ptr<boost::asio::ssl::context> tls_ctx, ClientHandler handler);
 
-        void run();
+        boost::asio::awaitable<void> run();
         
         private:
         boost::asio::ip::tcp::acceptor acceptor;
         std::shared_ptr<boost::asio::ssl::context> tls_context;
         bool performReverseLookup{true};
         ClientHandler handle_client;
-        boost::asio::awaitable<void> accept_loop();
         boost::asio::awaitable<void> accept_client(TcpStream socket, int64_t connection_id);
     };
 }

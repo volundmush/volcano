@@ -46,13 +46,4 @@ namespace volcano::net {
             return std::unexpected(std::string("Failed to initialize TLS context: ") + e.what());
         }
     }
-
-    std::vector<std::shared_ptr<Server>> servers;
-
-    void bind_server(boost::asio::ip::address address, uint16_t port, std::shared_ptr<boost::asio::ssl::context> tls_context, std::function<boost::asio::awaitable<void>(AnyStream&&)> handle_client) {
-        auto &src = servers.emplace_back(std::make_shared<Server>(address, port, tls_context, std::move(handle_client)));
-        src->run();
-        return;
-    }
-
 }
