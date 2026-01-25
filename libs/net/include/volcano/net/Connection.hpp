@@ -40,6 +40,11 @@ namespace volcano::net {
     using TcpStream = boost::asio::ip::tcp::socket;
     using TlsStream = boost::asio::ssl::stream<TcpStream>;
 
+    class AnyStream;
+
+    inline void beast_close_socket(AnyStream& stream);
+    inline void beast_close_socket(AnyStream& stream, boost::system::error_code& ec);
+
     class AnyStream {
     public:
         using executor_type = TcpStream::executor_type;
@@ -110,16 +115,25 @@ namespace volcano::net {
         boost::asio::ip::tcp::endpoint endpoint_;
     };
 
-        inline auto format_as(const AnyStream& any_stream) {
-            auto &lowest = any_stream.lowest_layer();
-            boost::system::error_code ec;
-            auto endpoint = lowest.remote_endpoint(ec);
-            std::string address = ec ? "<unknown>" : boost::asio::ip::format_as(endpoint.address());
-            if (any_stream.is_tls()) {
-                return fmt::format("AnyTlsStream#{}({})", any_stream.id(), address);
-            }
-            return fmt::format("AnyTcpStream#{}({})", any_stream.id(), address);
+    inline auto format_as(const AnyStream& any_stream) {
+        auto &lowest = any_stream.lowest_layer();
+        boost::system::error_code ec;
+        auto endpoint = lowest.remote_endpoint(ec);
+        std::string address = ec ? "<unknown>" : boost::asio::ip::format_as(endpoint.address());
+        if (any_stream.is_tls()) {
+            return fmt::format("AnyTlsStream#{}({})", any_stream.id(), address);
         }
+        return fmt::format("AnyTcpStream#{}({})", any_stream.id(), address);
+    }
+
+    inline void beast_close_socket(AnyStream& stream) {
+        boost::system::error_code ec;
+        stream.lowest_layer().close(ec);
+    }
+
+    inline void beast_close_socket(AnyStream& stream, boost::system::error_code& ec) {
+        stream.lowest_layer().close(ec);
+    }
 }
 
 namespace boost::beast::websocket {

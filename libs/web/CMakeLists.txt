@@ -40,4 +40,5 @@ PUBLIC
     volcano::net
     volcano::jwt
     nlohmann_json
+    Boost::url
 )
