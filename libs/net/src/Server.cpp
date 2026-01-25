@@ -37,7 +37,7 @@ namespace volcano::net
 
     Server::Server(boost::asio::ip::tcp::acceptor acc, std::shared_ptr<boost::asio::ssl::context> tls_ctx, ClientHandler handler)
         : acceptor(std::move(acc)), tls_context(std::move(tls_ctx)), handle_client(std::move(handler)) {
-            if(!handler) {
+            if(!handle_client) {
                 throw std::invalid_argument("Client handler cannot be null");
             }
         }
@@ -45,7 +45,7 @@ namespace volcano::net
     Server::Server(boost::asio::ip::address address, uint16_t port, std::shared_ptr<boost::asio::ssl::context> tls_ctx, ClientHandler handler)
         : acceptor(boost::asio::make_strand(context()), boost::asio::ip::tcp::endpoint(address, port)),
           tls_context(std::move(tls_ctx)), handle_client(std::move(handler)) {
-            if(!handler) {
+            if(!handle_client) {
                 throw std::invalid_argument("Client handler cannot be null");
             }
           }
