@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 
 #include "Router.hpp"
+#include "HttpClient.hpp"
 
 
 namespace volcano::web {

@@ -41,4 +41,5 @@ PUBLIC
     volcano::jwt
     nlohmann_json
     Boost::url
+    OpenSSL::SSL
 )

@@ -1,6 +1,8 @@
 add_library(volcano_config STATIC)
 add_library(volcano::config ALIAS volcano_config)
 
+target_compile_features(volcano_config PUBLIC cxx_std_23)
+
 target_include_directories(volcano_config
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
