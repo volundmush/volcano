@@ -190,15 +190,16 @@ namespace volcano::web {
         : pool_(std::make_shared<HttpSessionPool>(std::move(target), std::move(options))) {}
 
     boost::asio::awaitable<HttpResponse> HttpClient::request(HttpRequest request) {
-        auto session = co_await pool_->acquire();
-        try {
-            auto response = co_await session->request(std::move(request));
-            pool_->release(session);
-            co_return response;
-        } catch (...) {
-            session->close();
-            pool_->release(session);
-            throw;
+        for (;;) {
+            auto session = co_await pool_->acquire();
+            try {
+                auto response = co_await session->request(std::move(request));
+                pool_->release(session);
+                co_return response;
+            } catch (...) {
+                session->close();
+                pool_->release(session);
+            }
         }
     }
 
