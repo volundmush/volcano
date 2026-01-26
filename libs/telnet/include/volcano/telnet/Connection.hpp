@@ -26,6 +26,10 @@ namespace volcano::telnet {
 
         boost::asio::awaitable<void> sendToClient(const TelnetFromGameMessage& msg);
 
+        const volcano::net::AnyStream& connection() const {
+            return conn_;
+        }
+
         private:
         volcano::net::AnyStream conn_;
         volcano::mud::ClientData client_data_;
@@ -63,11 +67,8 @@ namespace volcano::telnet {
 
     inline auto format_as(const TelnetConnection& telnet_connection) {
         auto &cd = telnet_connection.client_data();
-        return fmt::format("TelnetConnection{{id={}, address={}, hostname={}, tls={}}}",
-            cd.connection_id,
-            cd.client_address,
-            cd.client_hostname,
-            cd.tls ? "true" : "false"
+        return fmt::format("TelnetConnection({})",
+            telnet_connection.connection()
         );
     }
 

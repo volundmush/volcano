@@ -39,7 +39,6 @@ target_link_libraries(volcano_web
 PUBLIC
     volcano::net
     volcano::jwt
-    nlohmann_json
     Boost::url
     OpenSSL::SSL
 )

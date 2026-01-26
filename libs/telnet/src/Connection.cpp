@@ -171,10 +171,7 @@ namespace volcano::telnet {
         : conn_(std::move(connection)), 
         outgoing_messages_(conn_.get_executor(), 100),
         to_game_messages_(conn_.get_executor(), 100) {
-            client_data_.connection_id = conn_.id();
             client_data_.tls = conn_.is_tls();
-            client_data_.client_address = conn_.endpoint().address().to_string();
-            client_data_.client_hostname = conn_.hostname();
             client_data_.client_protocol = "telnet";
 
             options_.emplace(codes::SGA, std::make_shared<SGAOption>(*this));

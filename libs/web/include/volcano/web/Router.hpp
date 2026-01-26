@@ -26,6 +26,8 @@ namespace volcano::web {
         void add_websocket_handler(std::string_view path, EndpointGuard guard, WebSocketHandler handler);
         void register_parameter(std::string_view type, std::string_view pattern);
         void register_parameter(std::string_view type, std::function<bool(std::string_view)> validator);
+        void add_trusted_proxy(const boost::asio::ip::address& address);
+        bool is_trusted_proxy(const boost::asio::ip::address& address) const;
 
         struct MatchResult {
             Router* node;
@@ -73,6 +75,7 @@ namespace volcano::web {
 
         ChildMap static_children_;
         ChildMap param_children_;
+        std::vector<boost::asio::ip::address> trusted_proxies_;
         std::unordered_map<http::verb, RequestEndpoint> request_handlers_;
         std::optional<WebSocketEndpoint> websocket_handler_;
         std::shared_ptr<Registry> registry_;

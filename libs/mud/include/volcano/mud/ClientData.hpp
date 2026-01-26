@@ -6,9 +6,6 @@ namespace volcano::mud
 {
     struct ClientData
     {
-        int64_t connection_id = -1;
-        std::string client_address = "UNKNOWN";
-        std::string client_hostname = "UNKNOWN";
         std::string client_protocol = "UNKNOWN";
         std::string client_name = "UNKNOWN";
         std::string client_version = "UNKNOWN";

@@ -40,6 +40,38 @@ namespace volcano::config {
             }
         };
 
+        auto parse_address_list = [&](const char* key, std::vector<boost::asio::ip::address>& out) {
+            if (const char* value = get_env(key)) {
+                std::vector<boost::asio::ip::address> parsed_list;
+                std::string token;
+                auto push_token = [&]() {
+                    if (token.empty()) {
+                        return;
+                    }
+                    auto parsed = volcano::net::parse_address(token);
+                    if (!parsed) {
+                        throw std::runtime_error(std::string("Invalid ") + key + " entry: " + token);
+                    }
+                    parsed_list.push_back(*parsed);
+                    token.clear();
+                };
+
+                for (const char ch : std::string(value)) {
+                    if (ch == ',' || ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r') {
+                        push_token();
+                    } else {
+                        token.push_back(ch);
+                    }
+                }
+                push_token();
+
+                if (parsed_list.empty()) {
+                    throw std::runtime_error(std::string("Invalid ") + key + ": empty list");
+                }
+                out = std::move(parsed_list);
+            }
+        };
+
         Config cfg{};
 
         parse_address_env("HTTP_HOST", cfg.http.address);
@@ -96,6 +128,12 @@ namespace volcano::config {
         if (const char* aud = get_env("JWT_AUDIENCE")) {
             cfg.jwt.audience = aud;
         }
+
+        if (const char* server_address = get_env("SERVER_ADDRESS")) {
+            cfg.server_address = server_address;
+        }
+
+        parse_address_list("TRUSTED_PROXIES", cfg.trusted_proxies);
 
         return cfg;
     }

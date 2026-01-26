@@ -1,5 +1,8 @@
 #include <volcano/web/web.hpp>
 
+#include <optional>
+#include <vector>
+
 #include <boost/algorithm/string.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/use_awaitable.hpp>
@@ -7,9 +10,52 @@
 #include <boost/beast/websocket.hpp>
 
 #include "volcano/net/Connection.hpp"
+#include "volcano/net/net.hpp"
 
 
 namespace volcano::web {
+
+static std::optional<boost::asio::ip::address> parse_forwarded_address(std::string_view raw) {
+	std::string trimmed = boost::algorithm::trim_copy(std::string(raw));
+	if (trimmed.empty()) {
+		return std::nullopt;
+	}
+
+	if (trimmed.front() == '[') {
+		auto end = trimmed.find(']');
+		if (end != std::string::npos) {
+			trimmed = trimmed.substr(1, end - 1);
+		}
+	}
+
+	const auto first_colon = trimmed.find(':');
+	if (first_colon != std::string::npos && trimmed.find(':', first_colon + 1) == std::string::npos) {
+		trimmed = trimmed.substr(0, first_colon);
+	}
+
+	auto parsed = volcano::net::parse_address(trimmed);
+	if (!parsed) {
+		return std::nullopt;
+	}
+	return *parsed;
+}
+
+static std::vector<boost::asio::ip::address> parse_x_forwarded_for(std::string_view value) {
+	std::vector<boost::asio::ip::address> addresses;
+	std::size_t start = 0;
+	while (start < value.size()) {
+		auto end = value.find(',', start);
+		if (end == std::string_view::npos) {
+			end = value.size();
+		}
+		auto token = value.substr(start, end - start);
+		if (auto parsed = parse_forwarded_address(token)) {
+			addresses.push_back(*parsed);
+		}
+		start = end + 1;
+	}
+	return addresses;
+}
 
 static HttpResponse make_response(const HttpRequest& req, HttpAnswer answer) {
 	HttpResponse res{answer.status, req.version()};
@@ -83,15 +129,48 @@ volcano::net::ClientHandler make_router_handler(std::shared_ptr<Router> router) 
 				continue;
 			}
 
-			ClientInfo client_info{
+			ClientInfo connection_info{
 				.hostname = stream.hostname(),
 				.address = stream.endpoint().address(),
 			};
+			ClientInfo client_info = connection_info;
 
 			auto& node = *match->node;
 			auto params = std::move(match->params);
 
-			auto ctx = RequestContext{client_info, req, params, {}, nlohmann::json::object()};
+			if (router->is_trusted_proxy(connection_info.address)) {
+				std::optional<boost::asio::ip::address> forwarded_address;
+
+				auto forwarded_for = req.find("X-Forwarded-For");
+				if (forwarded_for != req.end()) {
+					auto list = parse_x_forwarded_for(forwarded_for->value());
+					if (!list.empty()) {
+						for (auto it = list.rbegin(); it != list.rend(); ++it) {
+							if (!router->is_trusted_proxy(*it)) {
+								forwarded_address = *it;
+								break;
+							}
+						}
+						if (!forwarded_address) {
+							forwarded_address = list.front();
+						}
+					}
+				}
+
+				if (!forwarded_address) {
+					auto origin_ip = req.find("X-Origin-Ip");
+					if (origin_ip != req.end()) {
+						forwarded_address = parse_forwarded_address(origin_ip->value());
+					}
+				}
+
+				if (forwarded_address) {
+					client_info.address = *forwarded_address;
+					client_info.hostname = client_info.address.to_string();
+				}
+			}
+
+			auto ctx = RequestContext{client_info, connection_info, req, params, {}, nlohmann::json::object()};
 			ctx.query = boost::urls::url_view(req.target()).params();
 
 			if (boost::beast::websocket::is_upgrade(req)) {

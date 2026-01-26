@@ -3,6 +3,7 @@
 #include <string_view>
 #include <cstdint>
 #include <filesystem>
+#include <vector>
 #include <volcano/net/net.hpp>
 
 namespace volcano::config {
@@ -32,6 +33,11 @@ namespace volcano::config {
         EndPointConfig telnets;
         TlsContext tls;
         JwtSecret jwt;
+        std::string server_address;
+        std::vector<boost::asio::ip::address> trusted_proxies{
+            boost::asio::ip::address_v4::loopback(),
+            boost::asio::ip::address_v6::loopback()
+        };
     };
 
     Config init(std::string_view log_file);

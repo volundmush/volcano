@@ -1,5 +1,7 @@
 #include <volcano/web/Router.hpp>
 
+#include <algorithm>
+
 namespace volcano::web {
 
 Router::Router() : registry_(std::make_shared<Registry>()) {
@@ -217,6 +219,16 @@ void Router::register_parameter(std::string_view type, std::function<bool(std::s
     }
 
     registry_->params[std::string(type)] = ParamSpec{std::nullopt, std::move(validator), "<validator>"};
+}
+
+void Router::add_trusted_proxy(const boost::asio::ip::address& address) {
+    if (std::find(trusted_proxies_.begin(), trusted_proxies_.end(), address) == trusted_proxies_.end()) {
+        trusted_proxies_.push_back(address);
+    }
+}
+
+bool Router::is_trusted_proxy(const boost::asio::ip::address& address) const {
+    return std::find(trusted_proxies_.begin(), trusted_proxies_.end(), address) != trusted_proxies_.end();
 }
 
 } // namespace vol::web

@@ -37,6 +37,7 @@ namespace volcano::web
     struct RequestContext
     {
         ClientInfo client;
+        ClientInfo connection;
         HttpRequest& request;
         Parameters& params;
         boost::urls::params_view query;
