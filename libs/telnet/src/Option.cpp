@@ -152,6 +152,9 @@ namespace volcano::telnet {
     }
 
     boost::asio::awaitable<void> TelnetOption::markNegotiationComplete(std::string name) {
+        if(tc.is_negotiation_completed()) {
+            co_return; // already completed no need to signal
+        }
         auto channel = getPendingChannel(name);
         boost::system::error_code ec;
         co_await channel->async_send(ec, true, boost::asio::use_awaitable);
@@ -379,7 +382,7 @@ namespace volcano::telnet {
         std::string payload(data);
         auto space_pos = payload.find(' ');
         std::string client_name;
-        std::string client_version;
+        std::string client_version = "UNKNOWN";
 
         if (space_pos != std::string::npos) {
             client_name = payload.substr(0, space_pos);
@@ -388,39 +391,7 @@ namespace volcano::telnet {
             client_name = payload;
         }
 
-        if (!client_name.empty()) {
-            client_data().client_name = client_name;
-            out["client_name"] = client_name;
-        }
-
-        if (!client_version.empty()) {
-            client_data().client_version = client_version;
-            out["client_version"] = client_version;
-        }
-
-        int max_color = 1;
-        std::string upper_name = to_upper_copy(client_name);
-
-        if (upper_name == "ATLANTIS" || upper_name == "CMUD" || upper_name == "KILDCLIENT" ||
-            upper_name == "MUDLET" || upper_name == "MUSHCLIENT" || upper_name == "PUTTY" ||
-            upper_name == "POTATO" || upper_name == "TINYFUGUE") {
-            max_color = std::max(max_color, 2);
-        } else if (upper_name == "BEIP") {
-            max_color = std::max(max_color, 3);
-        } else if (upper_name == "MUDLET") {
-            if (!client_version.empty() && client_version.rfind("1.1", 0) == 0) {
-                max_color = std::max(max_color, 2);
-            }
-        }
-
-        if (max_color != client_data().color) {
-            client_data().color = static_cast<uint8_t>(max_color);
-            out["color"] = max_color;
-        }
-
-        if (!out.empty()) {
-            co_await notifyChangedCapabilities(out);
-        }
+        co_await tc.setClientName(client_name, client_version);
 
         co_return;
     }

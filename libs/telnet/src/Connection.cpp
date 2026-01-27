@@ -8,6 +8,7 @@
 #include <cstring>
 #include <span>
 
+#include <boost/algorithm/string.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
@@ -588,6 +589,42 @@ namespace volcano::telnet {
         telnet->set_negotiation_timeout(negotiation_timeout);
         co_await telnet->run();
     }
+
+    boost::asio::awaitable<void> TelnetConnection::setClientName(const std::string& name, const std::string& version) {
+        nlohmann::json out;
+        out["client_name"] = name;
+        out["client_version"] = version;
+        
+        client_data_.client_name = name;
+        client_data_.client_version = version;
+
+        int max_color = 1;
+        std::string upper_name = boost::algorithm::to_upper_copy(name);
+
+        if (upper_name == "ATLANTIS" || upper_name == "CMUD" || upper_name == "KILDCLIENT" ||
+            upper_name == "MUDLET" || upper_name == "MUSHCLIENT" || upper_name == "PUTTY" ||
+            upper_name == "POTATO" || upper_name == "TINYFUGUE") {
+            max_color = std::max(max_color, 2);
+        } else if (upper_name == "BEIP") {
+            max_color = std::max(max_color, 3);
+        } else if (upper_name == "MUDLET") {
+            if (!version.empty() && version.rfind("1.1", 0) == 0) {
+                max_color = std::max(max_color, 2);
+            }
+        }
+
+        if (max_color != client_data_.color) {
+            client_data_.color = static_cast<uint8_t>(max_color);
+            out["color"] = max_color;
+        }
+
+        if (!out.empty()) {
+            co_await notifyChangedCapabilities(out);
+        }
+
+        co_return;
+    }
+
     boost::asio::awaitable<void> TelnetConnection::handleAppData(TelnetMessageData& app_data) {
         append_data_buffer_ += app_data.data;
 

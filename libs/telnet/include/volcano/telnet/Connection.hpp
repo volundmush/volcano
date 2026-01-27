@@ -18,6 +18,8 @@ namespace volcano::telnet {
         boost::asio::awaitable<void> negotiateOptions(boost::asio::steady_timer::duration negotiation_timeout);
         void requestAbort();
 
+        boost::asio::awaitable<void> setClientName(const std::string& name, const std::string& version);
+
         void set_negotiation_timeout(boost::asio::steady_timer::duration negotiation_timeout) {
             negotiation_timeout_ = negotiation_timeout;
         }
@@ -36,6 +38,10 @@ namespace volcano::telnet {
 
         std::shared_ptr<Channel<TelnetToTelnetMessage>> to_telnet_channel_shared() const {
             return to_telnet_messages_;
+        }
+
+        bool is_negotiation_completed() const {
+            return negotiation_completed_;
         }
 
         std::shared_ptr<TelnetLink> make_link() const;
