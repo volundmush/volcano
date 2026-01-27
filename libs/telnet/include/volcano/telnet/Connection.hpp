@@ -64,6 +64,7 @@ namespace volcano::telnet {
         boost::asio::awaitable<void> runReader();
         boost::asio::awaitable<void> runWriter();
         boost::asio::awaitable<void> runLink();
+        boost::asio::awaitable<void> runOutboundBridge();
         boost::asio::awaitable<void> runKeepAlive();
 
         void signalShutdown(TelnetShutdownReason reason);

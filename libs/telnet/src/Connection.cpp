@@ -327,6 +327,33 @@ namespace volcano::telnet {
         co_return;
     }
 
+    boost::asio::awaitable<void> TelnetConnection::runOutboundBridge() {
+        try {
+            for(;;) {
+                boost::system::error_code ec;
+                auto msg = co_await to_telnet_messages_->async_receive(
+                    boost::asio::bind_cancellation_slot(
+                        cancellation_signal_.slot(),
+                        boost::asio::redirect_error(boost::asio::use_awaitable, ec))
+                );
+                if(ec) {
+                    if(ec == boost::asio::error::operation_aborted) {
+                        co_return;
+                    }
+                    LERROR("{} outbound bridge error: {}", *this, ec.message());
+                    signalShutdown(TelnetShutdownReason::error);
+                    co_return;
+                }
+
+                co_await sendToClient(msg);
+            }
+        } catch(const boost::system::system_error& e) {
+            LERROR("{} outbound bridge encountered an error: {}", *this, e.what());
+            signalShutdown(TelnetShutdownReason::error);
+        }
+        co_return;
+    }
+
     boost::asio::awaitable<void> TelnetConnection::runWriter() {
         bool compressing = false;
         volcano::zlib::DeflateStream deflater(Z_BEST_COMPRESSION);
@@ -502,8 +529,9 @@ namespace volcano::telnet {
         auto w = runWriter();
         auto k = runKeepAlive();
         auto l = runLink();
+        auto o = runOutboundBridge();
 
-        co_await (std::move(r) || std::move(w) || std::move(k) || std::move(l));
+        co_await (std::move(r) || std::move(w) || std::move(k) || std::move(l) || std::move(o));
 
         co_return shutdown_reason_.load(std::memory_order_relaxed);
     }

@@ -38,6 +38,7 @@ namespace volcano::portal {
         using namespace boost::asio::experimental::awaitable_operators;
         co_await enterMode();
         co_await (runTelnetReader() || runImpl());
+        LINFO("Exiting mode handler");
         co_await exitMode();
         co_return;
     }
@@ -254,7 +255,10 @@ namespace volcano::portal {
         co_await link_->to_telnet->async_send(
             ec,
             volcano::telnet::TelnetMessageData{text},
-            boost::asio::use_awaitable);
+            boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+        if(ec) {
+            LERROR("Failed to send text to telnet link {}: {}", *link_, ec.message());
+        }
     }
 
     boost::asio::awaitable<void> Client::sendLine(const std::string& text)
@@ -279,7 +283,10 @@ namespace volcano::portal {
         co_await link_->to_telnet->async_send(
             ec,
             volcano::telnet::TelnetMessageGMCP{package, data},
-            boost::asio::use_awaitable);
+            boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+        if(ec) {
+            LERROR("Failed to send GMCP to telnet link {}: {}", *link_, ec.message());
+        }
     }
 
     boost::asio::awaitable<void> Client::enqueueMode(std::shared_ptr<ModeHandler> next)
