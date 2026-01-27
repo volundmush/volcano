@@ -101,6 +101,7 @@ namespace volcano::portal {
     }
 
     boost::asio::awaitable<void> ModeHandler::handleDisconnect() {
+        requestCancel();
         co_return;
     }
 

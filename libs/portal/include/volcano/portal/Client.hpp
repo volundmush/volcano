@@ -80,6 +80,10 @@ namespace volcano::portal {
 
         std::optional<JwtTokens> tokens;
 
+        volcano::mud::ClientData& clientData() {
+            return link_->client_data;
+        }
+
         private:
         std::shared_ptr<volcano::telnet::TelnetLink> link_;
         volcano::web::ClientInfo client_info_;
