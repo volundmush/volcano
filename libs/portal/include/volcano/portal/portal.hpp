@@ -3,6 +3,8 @@
 #include <string>
 #include <string_view>
 
+#include "Client.hpp"
+
 namespace volcano::portal {
 
     struct PortalConfig {
