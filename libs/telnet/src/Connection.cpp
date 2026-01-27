@@ -257,46 +257,69 @@ namespace volcano::telnet {
                     }
                 }
 
-                boost::beast::flat_buffer& use_buffer = decompressing ? decompressed_buffer : buffer;
+                for(;;) {
+                    boost::beast::flat_buffer& use_buffer = decompressing ? decompressed_buffer : buffer;
 
-                if(use_buffer.size() > telnet_limits.max_message_buffer) {
-                    LERROR("{} incoming buffer exceeded limit ({} bytes).", *this, telnet_limits.max_message_buffer);
-                    co_await sendAppData("Input too large. Disconnecting.\r\n");
-                    co_await sendToClient(TelnetDisconnect::buffer_overflow);
-                    boost::system::error_code send_ec;
-                    co_await to_game_messages_->async_send(send_ec, TelnetDisconnect::buffer_overflow, boost::asio::use_awaitable);
-                    co_await volcano::net::waitForever(cancellation_signal_);
-                    co_return;
-                }
-
-                auto parsed = parseTelnetMessage(
-                    std::string_view{
-                        static_cast<const char*>(use_buffer.data().data()),
-                        use_buffer.size()
+                    if(use_buffer.size() == 0) {
+                        break;
                     }
-                );
 
-                if(!parsed) {
-                    continue;
-                }
+                    if(use_buffer.size() > telnet_limits.max_message_buffer) {
+                        LERROR("{} incoming buffer exceeded limit ({} bytes).", *this, telnet_limits.max_message_buffer);
+                        co_await sendAppData("Input too large. Disconnecting.\r\n");
+                        co_await sendToClient(TelnetDisconnect::buffer_overflow);
+                        boost::system::error_code send_ec;
+                        co_await to_game_messages_->async_send(send_ec, TelnetDisconnect::buffer_overflow, boost::asio::use_awaitable);
+                        co_await volcano::net::waitForever(cancellation_signal_);
+                        co_return;
+                    }
 
-                use_buffer.consume(parsed.value().second);
+                    auto parsed = parseTelnetMessage(
+                        std::string_view{
+                            static_cast<const char*>(use_buffer.data().data()),
+                            use_buffer.size()
+                        }
+                    );
 
-                auto &msg = parsed.value().first;
+                    if(!parsed) {
+                        break;
+                    }
 
-                if(std::holds_alternative<TelnetMessageSubnegotiation>(msg)) {
-                    auto& sub = std::get<TelnetMessageSubnegotiation>(msg);
-                    if(sub.option == codes::MCCP3) {
-                        // enable incoming decompression. We need to treat all further incoming data as compressed.
+                    use_buffer.consume(parsed.value().second);
+
+                    auto &msg = parsed.value().first;
+                    bool enable_mccp3 = false;
+
+                    if(std::holds_alternative<TelnetMessageSubnegotiation>(msg)) {
+                        auto& sub = std::get<TelnetMessageSubnegotiation>(msg);
+                        if(sub.option == codes::MCCP3 && !decompressing) {
+                            enable_mccp3 = true;
+                        }
+                    }
+
+                    co_await processData(msg);
+
+                    if(enable_mccp3) {
                         nlohmann::json capabilities;
                         capabilities["mccp3_enabled"] = true;
                         co_await notifyChangedCapabilities(capabilities);
                         decompressing = true;
                         inflater.reset();
+
+                        if(buffer.size() > 0) {
+                            try {
+                                auto input = buffer_as_bytes(buffer);
+                                inflater.write(input, [&](std::span<const std::byte> chunk) {
+                                    append_bytes(decompressed_buffer, chunk);
+                                });
+                                buffer.consume(buffer.size());
+                            } catch (const std::exception& e) {
+                                LERROR("{} zlib inflate error {}", *this, e.what());
+                                co_return;
+                            }
+                        }
                     }
                 }
-
-                co_await processData(msg);
 
             }
         } catch(boost::system::system_error& e) {
@@ -489,15 +512,6 @@ namespace volcano::telnet {
 
                 boost::system::error_code recv_ec;
                 co_await chan->async_receive(boost::asio::redirect_error(boost::asio::use_awaitable, recv_ec));
-                if(recv_ec) {
-
-                    if(recv_ec == boost::asio::error::operation_aborted) {
-                        co_return;
-                    }
-
-                    LERROR("{} negotiation channel error: {}", *this, recv_ec.message());
-                    co_return;
-                }
             }
 
             co_return;
