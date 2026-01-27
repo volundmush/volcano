@@ -39,6 +39,7 @@ namespace volcano::portal {
         virtual boost::asio::awaitable<void> handleCommand(const std::string& data);
         virtual boost::asio::awaitable<void> handleGMCP(const std::string& package, const nlohmann::json& data);
         virtual boost::asio::awaitable<void> handleDisconnect();
+        virtual boost::asio::awaitable<void> handleChangeCapabilities(const nlohmann::json& j);
 
         virtual boost::asio::awaitable<void> enterMode();
         virtual boost::asio::awaitable<void> exitMode();

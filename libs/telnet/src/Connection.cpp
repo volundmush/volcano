@@ -309,6 +309,7 @@ namespace volcano::telnet {
     boost::asio::awaitable<void> TelnetConnection::runLink() {
         try {
             co_await negotiateOptions(negotiation_timeout_);
+            negotiation_completed_ = true;
 
             auto link = make_link();
             boost::system::error_code link_ec;
@@ -731,6 +732,9 @@ namespace volcano::telnet {
     }
 
     boost::asio::awaitable<void> TelnetConnection::notifyChangedCapabilities(nlohmann::json& capabilities) {
+        if(!negotiation_completed_) {
+            co_return;
+        }
         boost::system::error_code ec;
         co_await to_game_messages_->async_send(ec, TelnetChangeCapabilities{capabilities}, boost::asio::use_awaitable);
         if(ec) {

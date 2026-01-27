@@ -59,6 +59,7 @@ namespace volcano::telnet {
         bool telnet_mode{false};
         boost::asio::steady_timer::duration negotiation_timeout_{std::chrono::seconds(3)};
         boost::asio::cancellation_signal cancellation_signal_;
+        bool negotiation_completed_{false};
 
         boost::asio::awaitable<void> runReader();
         boost::asio::awaitable<void> runWriter();

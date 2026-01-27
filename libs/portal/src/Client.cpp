@@ -91,6 +91,7 @@ namespace volcano::portal {
             } else if(std::holds_alternative<volcano::telnet::TelnetChangeCapabilities>(game_msg)) {
                 const auto &cap_msg = std::get<volcano::telnet::TelnetChangeCapabilities>(game_msg);
                 co_await client_.changeCapabilities(cap_msg.capabilities);
+                co_await handleChangeCapabilities(cap_msg.capabilities);
             }
         }
     }
@@ -105,6 +106,10 @@ namespace volcano::portal {
 
     boost::asio::awaitable<void> ModeHandler::handleDisconnect() {
         requestCancel();
+        co_return;
+    }
+
+    boost::asio::awaitable<void> ModeHandler::handleChangeCapabilities(const nlohmann::json& j) {
         co_return;
     }
 
