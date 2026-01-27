@@ -62,6 +62,7 @@ namespace volcano::portal {
         boost::asio::awaitable<void> run();
 
         boost::asio::awaitable<void> sendText(const std::string& text);
+        boost::asio::awaitable<void> sendLine(const std::string& text);
         boost::asio::awaitable<void> sendGMCP(const std::string& package, const nlohmann::json& data);
 
         boost::asio::awaitable<void> enqueueMode(std::shared_ptr<ModeHandler> next);

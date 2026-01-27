@@ -1,8 +1,10 @@
 #include "volcano/net/net.hpp"
 #include "volcano/portal/Client.hpp"
+#include <boost/algorithm/string.hpp>
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/redirect_error.hpp>
+#include "volcano/mud/ClientDataSave.hpp"
 
 #include <chrono>
 
@@ -240,6 +242,19 @@ namespace volcano::portal {
             boost::asio::use_awaitable);
     }
 
+    boost::asio::awaitable<void> Client::sendLine(const std::string& text)
+    {
+        if (!link_ || !link_->to_telnet) {
+            co_return;
+        }
+        if(boost::algorithm::ends_with(text, "\r\n")) {
+            co_await sendText(text);
+        } else {
+            co_await sendText(text + "\r\n");
+        }
+        co_return;
+    }
+
     boost::asio::awaitable<void> Client::sendGMCP(const std::string& package, const nlohmann::json& data)
     {
         if (!link_ || !link_->to_telnet) {
@@ -262,6 +277,12 @@ namespace volcano::portal {
     volcano::telnet::Channel<volcano::telnet::TelnetToGameMessage>& Client::telnetToGameChannel()
     {
         return *link_->to_game;
+    }
+
+    boost::asio::awaitable<void> Client::changeCapabilities(const nlohmann::json& j)
+    {
+        j.get_to(link_->client_data);
+        co_return;
     }
 
     boost::asio::awaitable<void> handle_telnet(volcano::net::AnyStream&& stream)
