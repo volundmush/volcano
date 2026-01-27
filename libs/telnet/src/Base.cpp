@@ -2,4 +2,5 @@
 
 namespace volcano::telnet {
 
+	TelnetLimits telnet_limits;
 }

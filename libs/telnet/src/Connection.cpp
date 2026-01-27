@@ -2,6 +2,7 @@
 #include "volcano/telnet/Option.hpp"
 #include "volcano/log/Log.hpp"
 #include "volcano/zlib/Zlib.hpp"
+#include "volcano/net/net.hpp"
 
 #include <cstddef>
 #include <cstring>
@@ -170,7 +171,8 @@ namespace volcano::telnet {
     TelnetConnection::TelnetConnection(volcano::net::AnyStream connection)
         : conn_(std::move(connection)), 
         outgoing_messages_(conn_.get_executor(), 100),
-        to_game_messages_(conn_.get_executor(), 100) {
+        to_telnet_messages_(std::make_shared<Channel<TelnetToTelnetMessage>>(conn_.get_executor(), 100)),
+        to_game_messages_(std::make_shared<Channel<TelnetToGameMessage>>(conn_.get_executor(), 100)) {
             client_data_.tls = conn_.is_tls();
             client_data_.client_protocol = "telnet";
 
@@ -229,7 +231,7 @@ namespace volcano::telnet {
                     }
                     LINFO("TelnetConnection read error with {}: {}", *this, read_ec.message());
                     boost::system::error_code send_ec;
-                    co_await to_game_messages_.async_send(send_ec, TelnetDisconnect{}, boost::asio::use_awaitable);
+                    co_await to_game_messages_->async_send(send_ec, TelnetDisconnect::remote_disconnect, boost::asio::use_awaitable);
                     if(send_ec) {
                         LERROR("{} to_game channel error: {}", *this, send_ec.message());
                     }
@@ -239,9 +241,6 @@ namespace volcano::telnet {
                 buffer.commit(read_bytes);
                 if(buffer.size() == 0) {
                     continue;
-                } else if(buffer.size() > 2 * 1024 * 1024) {
-                    LERROR("{} received overly large message.", *this);
-                    co_return;
                 }
 
                 if(decompressing) {
@@ -258,6 +257,16 @@ namespace volcano::telnet {
                 }
 
                 boost::beast::flat_buffer& use_buffer = decompressing ? decompressed_buffer : buffer;
+
+                if(use_buffer.size() > telnet_limits.max_message_buffer) {
+                    LERROR("{} incoming buffer exceeded limit ({} bytes).", *this, telnet_limits.max_message_buffer);
+                    co_await sendAppData("Input too large. Disconnecting.\r\n");
+                    co_await sendToClient(TelnetDisconnect::buffer_overflow);
+                    boost::system::error_code send_ec;
+                    co_await to_game_messages_->async_send(send_ec, TelnetDisconnect::buffer_overflow, boost::asio::use_awaitable);
+                    co_await volcano::net::waitForever(cancellation_signal_);
+                    co_return;
+                }
 
                 auto parsed = parseTelnetMessage(
                     std::string_view{
@@ -297,6 +306,26 @@ namespace volcano::telnet {
         co_return;
     }
 
+    boost::asio::awaitable<void> TelnetConnection::runLink() {
+        try {
+            co_await negotiateOptions(negotiation_timeout_);
+
+            auto link = make_link();
+            boost::system::error_code link_ec;
+            co_await link_channel().async_send(link_ec, link, boost::asio::use_awaitable);
+            if(link_ec) {
+                LERROR("Telnet link channel error: {}", link_ec.message());
+            }
+
+            co_await volcano::net::waitForever(cancellation_signal_);
+
+        } catch(const boost::system::system_error& e) {
+            LERROR("{} runLink encountered an error: {}", *this, e.what());
+            signalShutdown(TelnetShutdownReason::error);
+        }
+        co_return;
+    }
+
     boost::asio::awaitable<void> TelnetConnection::runWriter() {
         bool compressing = false;
         volcano::zlib::DeflateStream deflater(Z_BEST_COMPRESSION);
@@ -320,7 +349,22 @@ namespace volcano::telnet {
                 }
 
                 if(std::holds_alternative<TelnetDisconnect>(msg)) {
-                    signalShutdown(TelnetShutdownReason::remote_disconnect);
+                    auto reason = std::get<TelnetDisconnect>(msg);
+                    switch (reason) {
+                        case TelnetDisconnect::remote_disconnect:
+                            signalShutdown(TelnetShutdownReason::remote_disconnect);
+                            break;
+                        case TelnetDisconnect::local_disconnect:
+                            signalShutdown(TelnetShutdownReason::aborted);
+                            break;
+                        case TelnetDisconnect::buffer_overflow:
+                        case TelnetDisconnect::appdata_overflow:
+                        case TelnetDisconnect::protocol_error:
+                        case TelnetDisconnect::error:
+                        case TelnetDisconnect::unknown:
+                            signalShutdown(TelnetShutdownReason::error);
+                            break;
+                    }
                     co_return;
                 }
 
@@ -438,7 +482,7 @@ namespace volcano::telnet {
         co_return;
     }
 
-    boost::asio::awaitable<TelnetShutdownReason> TelnetConnection::runTelnet() {
+    boost::asio::awaitable<TelnetShutdownReason> TelnetConnection::run() {
         using namespace boost::asio::experimental::awaitable_operators;
 
         shutdown_reason_.store(TelnetShutdownReason::unknown, std::memory_order_relaxed);
@@ -451,30 +495,18 @@ namespace volcano::telnet {
         auto r = runReader();
         auto w = runWriter();
         auto k = runKeepAlive();
+        auto l = runLink();
 
-        co_await (std::move(r) || std::move(w) || std::move(k));
+        co_await (std::move(r) || std::move(w) || std::move(k) || std::move(l));
 
         co_return shutdown_reason_.load(std::memory_order_relaxed);
     }
 
-    boost::asio::awaitable<TelnetShutdownReason> TelnetConnection::run() {
-        // we'll use runTelnet() on conn's executor but await it here.
-        // This ensures that the strand only cares about reading and writing and the two channels.
-        // (and the keepalive.)
-        auto exec = conn_.get_executor();
-        co_return co_await boost::asio::co_spawn(
-            exec,
-            [this]() -> boost::asio::awaitable<TelnetShutdownReason> {
-                co_return co_await runTelnet();
-            },
-            boost::asio::use_awaitable
-        );
-    }
 
-    boost::asio::awaitable<void> TelnetConnection::sendToClient(const TelnetFromGameMessage& msg) {
+    boost::asio::awaitable<void> TelnetConnection::sendToClient(const TelnetToTelnetMessage& msg) {
         TelnetOutgoingMessage telnet_msg;
         if(std::holds_alternative<TelnetDisconnect>(msg)) {
-            telnet_msg = TelnetDisconnect{};
+            telnet_msg = std::get<TelnetDisconnect>(msg);
         } else {
             const auto &client_msg = std::get<TelnetClientMessage>(msg);
             if(std::holds_alternative<TelnetMessageData>(client_msg)) {
@@ -500,8 +532,39 @@ namespace volcano::telnet {
         co_return;
     }
 
+    std::shared_ptr<TelnetLink> TelnetConnection::make_link() const {
+        auto link = std::make_shared<TelnetLink>();
+        link->address = conn_.endpoint().address();
+        link->hostname = conn_.hostname();
+        link->client_data = client_data_;
+        link->to_game = to_game_messages_;
+        link->to_telnet = to_telnet_messages_;
+        return link;
+    }
+
+    Channel<std::shared_ptr<TelnetLink>>& link_channel() {
+        static Channel<std::shared_ptr<TelnetLink>> channel(volcano::net::context(), 256);
+        return channel;
+    }
+
+    boost::asio::awaitable<void> handle_linked_telnet(volcano::net::AnyStream&& stream,
+        boost::asio::steady_timer::duration negotiation_timeout) {
+        auto telnet = std::make_shared<TelnetConnection>(std::move(stream));
+        telnet->set_negotiation_timeout(negotiation_timeout);
+        co_await telnet->run();
+    }
     boost::asio::awaitable<void> TelnetConnection::handleAppData(TelnetMessageData& app_data) {
         append_data_buffer_ += app_data.data;
+
+        if(append_data_buffer_.size() > telnet_limits.max_appdata_buffer) {
+            LERROR("{} appdata buffer exceeded limit ({} bytes).", *this, telnet_limits.max_appdata_buffer);
+            co_await sendAppData("Input line too long. Disconnecting.\r\n");
+            co_await sendToClient(TelnetDisconnect::appdata_overflow);
+            boost::system::error_code send_ec;
+            co_await to_game_messages_->async_send(send_ec, TelnetDisconnect::appdata_overflow, boost::asio::use_awaitable);
+            co_await volcano::net::waitForever(cancellation_signal_);
+            co_return;
+        }
 
         auto send_line = [this](std::string line) -> boost::asio::awaitable<void> {
             if (!line.empty() && line.back() == '\r') {
@@ -509,7 +572,7 @@ namespace volcano::telnet {
             }
 
             boost::system::error_code ec;
-            co_await to_game_messages_.async_send(ec, TelnetMessageData{std::move(line)}, boost::asio::use_awaitable);
+            co_await to_game_messages_->async_send(ec, TelnetMessageData{std::move(line)}, boost::asio::use_awaitable);
             if(ec) {
                 LERROR("{} to_game channel error: {}", conn_, ec.message());
             }
@@ -582,7 +645,7 @@ namespace volcano::telnet {
         } else if(std::holds_alternative<TelnetMessageGMCP>(data)) {
             TelnetMessageGMCP& msg = std::get<TelnetMessageGMCP>(data);
             boost::system::error_code ec;
-            co_await to_game_messages_.async_send(ec, TelnetMessageGMCP{std::move(msg.package), std::move(msg.data)}, boost::asio::use_awaitable);
+            co_await to_game_messages_->async_send(ec, TelnetMessageGMCP{std::move(msg.package), std::move(msg.data)}, boost::asio::use_awaitable);
             if(ec) {
                 LERROR("{} to_game channel error: {}", *this, ec.message());
             }
@@ -663,7 +726,7 @@ namespace volcano::telnet {
 
     boost::asio::awaitable<void> TelnetConnection::notifyChangedCapabilities(nlohmann::json& capabilities) {
         boost::system::error_code ec;
-        co_await to_game_messages_.async_send(ec, TelnetChangeCapabilities{capabilities}, boost::asio::use_awaitable);
+        co_await to_game_messages_->async_send(ec, TelnetChangeCapabilities{capabilities}, boost::asio::use_awaitable);
         if(ec) {
             LERROR("{} to_game channel error: {}", *this, ec.message());
         }

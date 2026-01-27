@@ -4,6 +4,8 @@
 #include "volcano/net/Connection.hpp"
 #include "volcano/mud/ClientData.hpp"
 
+#include <memory>
+
 namespace volcano::telnet {
 
     class TelnetConnection {
@@ -16,15 +18,29 @@ namespace volcano::telnet {
         boost::asio::awaitable<void> negotiateOptions(boost::asio::steady_timer::duration negotiation_timeout);
         void requestAbort();
 
+        void set_negotiation_timeout(boost::asio::steady_timer::duration negotiation_timeout) {
+            negotiation_timeout_ = negotiation_timeout;
+        }
+
         const volcano::mud::ClientData& client_data() const {
             return client_data_;
         }
 
         Channel<TelnetToGameMessage>& to_game_channel() {
+            return *to_game_messages_;
+        }
+
+        std::shared_ptr<Channel<TelnetToGameMessage>> to_game_channel_shared() const {
             return to_game_messages_;
         }
 
-        boost::asio::awaitable<void> sendToClient(const TelnetFromGameMessage& msg);
+        std::shared_ptr<Channel<TelnetToTelnetMessage>> to_telnet_channel_shared() const {
+            return to_telnet_messages_;
+        }
+
+        std::shared_ptr<TelnetLink> make_link() const;
+
+        boost::asio::awaitable<void> sendToClient(const TelnetToTelnetMessage& msg);
 
         const volcano::net::AnyStream& connection() const {
             return conn_;
@@ -35,17 +51,20 @@ namespace volcano::telnet {
         volcano::mud::ClientData client_data_;
         std::vector<std::shared_ptr<Channel<bool>>> pending_channels_;
         Channel<TelnetOutgoingMessage> outgoing_messages_;
-        Channel<TelnetToGameMessage> to_game_messages_;
+        std::shared_ptr<Channel<TelnetToTelnetMessage>> to_telnet_messages_;
+        std::shared_ptr<Channel<TelnetToGameMessage>> to_game_messages_;
         std::atomic_bool abort_requested_{false};
         std::atomic<TelnetShutdownReason> shutdown_reason_{TelnetShutdownReason::unknown};
         std::string append_data_buffer_;
         bool telnet_mode{false};
+        boost::asio::steady_timer::duration negotiation_timeout_{std::chrono::seconds(3)};
         boost::asio::cancellation_signal cancellation_signal_;
 
-        boost::asio::awaitable<TelnetShutdownReason> runTelnet();
         boost::asio::awaitable<void> runReader();
         boost::asio::awaitable<void> runWriter();
+        boost::asio::awaitable<void> runLink();
         boost::asio::awaitable<void> runKeepAlive();
+
         void signalShutdown(TelnetShutdownReason reason);
         
         boost::asio::awaitable<void> processData(TelnetMessage& data);
@@ -64,6 +83,11 @@ namespace volcano::telnet {
         boost::asio::awaitable<void> handleSubNegotiation(TelnetMessageSubnegotiation& subnegotiation);
         boost::asio::awaitable<void> handleCommand(TelnetMessageCommand& command);
     };
+
+    Channel<std::shared_ptr<TelnetLink>>& link_channel();
+    boost::asio::awaitable<void> handle_linked_telnet(
+        volcano::net::AnyStream&& stream,
+        boost::asio::steady_timer::duration negotiation_timeout = std::chrono::seconds(3));
 
     inline auto format_as(const TelnetConnection& telnet_connection) {
         auto &cd = telnet_connection.client_data();

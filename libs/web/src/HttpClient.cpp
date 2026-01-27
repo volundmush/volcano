@@ -8,8 +8,8 @@
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
-#include <openssl/ssl.h>
-
+#include <algorithm>
+#include <cctype>
 #include <stdexcept>
 
 namespace volcano::web {
@@ -26,6 +26,31 @@ namespace volcano::web {
             ctx->set_default_verify_paths();
             ctx->set_verify_mode(boost::asio::ssl::verify_peer);
             return ctx;
+        }
+
+        std::string normalize_host_for_connect(std::string host) {
+            if (host.empty()) {
+                return host;
+            }
+
+            if (host.front() == '[') {
+                auto end = host.find(']');
+                if (end != std::string::npos) {
+                    return host.substr(1, end - 1);
+                }
+            }
+
+            auto colon = host.rfind(':');
+            if (colon != std::string::npos && host.find(':') == colon) {
+                auto port_part = host.substr(colon + 1);
+                bool all_digits = !port_part.empty() && std::all_of(port_part.begin(), port_part.end(),
+                    [](unsigned char c) { return std::isdigit(c) != 0; });
+                if (all_digits) {
+                    return host.substr(0, colon);
+                }
+            }
+
+            return host;
         }
     }
 
@@ -50,52 +75,25 @@ namespace volcano::web {
             co_return;
         }
 
-        boost::asio::ip::tcp::endpoint endpoint(target_.address, target_.port);
-        auto host = target_.host();
+        auto host_header = target_.host_header;
+        if (host_header.empty()) {
+            host_header = target_.address.to_string();
+        }
+        auto connect_host = normalize_host_for_connect(host_header);
 
+        volcano::net::ConnectOptions options{};
         if (target_.scheme == HttpScheme::https) {
-            auto ctx = tls_context_ ? tls_context_ : default_tls_context();
-            boost::asio::ssl::stream<volcano::net::TcpStream> tls_stream(
-                boost::asio::make_strand(volcano::net::context()), *ctx);
-
-            boost::system::error_code ec;
-            co_await tls_stream.next_layer().async_connect(
-                endpoint, boost::asio::redirect_error(boost::asio::use_awaitable, ec));
-            if (ec) {
-                throw std::runtime_error("TLS connect failed: " + ec.message());
-            }
-
-            if (!host.empty()) {
-                SSL_set_tlsext_host_name(tls_stream.native_handle(), host.c_str());
-            }
-
-            co_await tls_stream.async_handshake(
-                boost::asio::ssl::stream_base::client,
-                boost::asio::redirect_error(boost::asio::use_awaitable, ec));
-            if (ec) {
-                throw std::runtime_error("TLS handshake failed: " + ec.message());
-            }
-
-            auto remote = tls_stream.next_layer().remote_endpoint(ec);
-            if (ec) {
-                remote = endpoint;
-            }
-
-            stream_.emplace(next_session_id(), std::move(tls_stream), remote, host);
-            co_return;
+            options.transport = volcano::net::TransportMode::tls;
+            options.tls_context = tls_context_ ? tls_context_ : default_tls_context();
         }
 
-        volcano::net::TcpStream socket(boost::asio::make_strand(volcano::net::context()));
-        boost::system::error_code ec;
-        co_await socket.async_connect(endpoint, boost::asio::redirect_error(boost::asio::use_awaitable, ec));
-        if (ec) {
-            throw std::runtime_error("TCP connect failed: " + ec.message());
+        auto connected = co_await volcano::net::connect_any(connect_host, target_.port, options);
+        if (!connected) {
+            auto prefix = target_.scheme == HttpScheme::https ? "TLS connect failed: " : "TCP connect failed: ";
+            throw std::runtime_error(prefix + connected.error().message());
         }
-        auto remote = socket.remote_endpoint(ec);
-        if (ec) {
-            remote = endpoint;
-        }
-        stream_.emplace(next_session_id(), std::move(socket), remote, host);
+
+        stream_.emplace(std::move(*connected));
     }
 
     boost::asio::awaitable<HttpResponse> HttpSession::request(HttpRequest request) {

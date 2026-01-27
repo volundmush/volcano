@@ -220,4 +220,30 @@ namespace volcano::jwt {
         response_json["expires_in"] = static_cast<int>(token_expiry.count());
         return response_json;
     }
+
+    std::expected<nlohmann::json, std::string> extract_payload(std::string_view token) {
+        const auto first_dot = token.find('.');
+        if (first_dot == std::string_view::npos) {
+            return std::unexpected("invalid token format");
+        }
+        const auto second_dot = token.find('.', first_dot + 1);
+        if (second_dot == std::string_view::npos || token.find('.', second_dot + 1) != std::string_view::npos) {
+            return std::unexpected("invalid token format");
+        }
+
+        auto payload_part = token.substr(first_dot + 1, second_dot - first_dot - 1);
+        const std::string decoded_payload = base64UrlDecode(payload_part);
+        if (decoded_payload.empty() && !payload_part.empty()) {
+            return std::unexpected("invalid token payload");
+        }
+
+        nlohmann::json payload_json;
+        try {
+            payload_json = nlohmann::json::parse(decoded_payload);
+        } catch (const std::exception& ex) {
+            return std::unexpected(std::string("invalid token payload json: ") + ex.what());
+        }
+
+        return payload_json;
+    }
 }

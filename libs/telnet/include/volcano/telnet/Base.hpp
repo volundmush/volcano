@@ -5,7 +5,9 @@
 #include <expected>
 #include <vector>
 #include <cstdint>
+#include <cstddef>
 #include <functional>
+#include <memory>
 #include <chrono>
 #include <atomic>
 
@@ -15,6 +17,8 @@
 #include <boost/asio.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/experimental/concurrent_channel.hpp>
+
+#include "volcano/mud/ClientData.hpp"
 
 namespace volcano::telnet {
     template<typename T>
@@ -88,7 +92,15 @@ namespace volcano::telnet {
     using TelnetGameMessage = std::variant<TelnetMessageData, TelnetMessageGMCP, TelnetChangeCapabilities>;
     using TelnetClientMessage = std::variant<TelnetMessageData, TelnetMessageGMCP, TelnetMessageMSSP>;
 
-    struct TelnetDisconnect {};
+    enum class TelnetDisconnect {
+        unknown,
+        remote_disconnect,
+        local_disconnect,
+        buffer_overflow,
+        appdata_overflow,
+        protocol_error,
+        error,
+    };
     enum class TelnetShutdownReason {
         unknown,
         client_disconnect,
@@ -99,7 +111,22 @@ namespace volcano::telnet {
 
     using TelnetOutgoingMessage = std::variant<TelnetMessage, TelnetDisconnect>;
     using TelnetToGameMessage = std::variant<TelnetGameMessage, TelnetDisconnect>;
-    using TelnetFromGameMessage = std::variant<TelnetClientMessage, TelnetDisconnect>;
+    using TelnetToTelnetMessage = std::variant<TelnetClientMessage, TelnetDisconnect>;
+
+    struct TelnetLimits {
+        std::size_t max_message_buffer{2 * 1024 * 1024};
+        std::size_t max_appdata_buffer{64 * 1024};
+    };
+
+    extern TelnetLimits telnet_limits;
+
+    struct TelnetLink {
+        boost::asio::ip::address address;
+        std::string hostname;
+        volcano::mud::ClientData client_data;
+        std::shared_ptr<Channel<TelnetToGameMessage>> to_game;
+        std::shared_ptr<Channel<TelnetToTelnetMessage>> to_telnet;
+    };
 
     class TelnetConnection;
     class TelnetOption;

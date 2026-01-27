@@ -30,4 +30,6 @@ namespace volcano::jwt {
           nlohmann::json base_claims(nlohmann::json& claims) const;
       };
 
-} // namespace dbat::jwt
+      std::expected<nlohmann::json, std::string> extract_payload(std::string_view token);
+
+} // namespace volcano::jwt
