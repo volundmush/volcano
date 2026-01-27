@@ -1,4 +1,5 @@
 #include "volcano/net/net.hpp"
+#include "volcano/log/Log.hpp"
 #include "volcano/portal/Client.hpp"
 #include <boost/algorithm/string.hpp>
 #include <boost/asio/bind_cancellation_slot.hpp>
@@ -288,11 +289,15 @@ namespace volcano::portal {
     boost::asio::awaitable<void> handle_telnet(volcano::net::AnyStream&& stream)
     {
         volcano::telnet::TelnetConnection telnet(std::move(stream));
+        LINFO("Starting telnet connection handler for {}", telnet);
         co_await telnet.run();
+        LTRACE("Telnet connection handler for {} has exited.", telnet);
+        co_return;
     }
 
     boost::asio::awaitable<void> run_portal_links()
     {
+        LINFO("Starting portal link handler.");
         auto& channel = volcano::telnet::link_channel();
         for(;;) {
             boost::system::error_code ec;
@@ -306,6 +311,7 @@ namespace volcano::portal {
             }
 
             if(!link) {
+                LERROR("Received null link in portal link handler.");
                 continue;
             }
 
@@ -313,8 +319,11 @@ namespace volcano::portal {
             boost::asio::co_spawn(
                 strand,
                 [link]() -> boost::asio::awaitable<void> {
+                    LINFO("Starting portal client handler for {}", *link);
                     Client client(link);
                     co_await client.run();
+                    LTRACE("Portal client handler for {} has exited.", *link);
+                    co_return;
                 },
                 boost::asio::detached);
         }

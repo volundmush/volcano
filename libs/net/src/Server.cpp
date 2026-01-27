@@ -55,18 +55,18 @@ namespace volcano::net
         auto endpoint = socket.remote_endpoint();
         auto client_address = endpoint.address().to_string();
         auto client_hostname = client_address;
-        LINFO("Incoming connection from {}", client_address);
+        LINFO("Incoming connection {} from {}", connection_id, client_address);
 
         if (performReverseLookup)
         {
             if (auto rev_res = co_await reverse_lookup(endpoint); rev_res)
             {
                 client_hostname = rev_res.value();
-                LINFO("Resolved hostname {} for {}", client_hostname, client_address);
+                LINFO("Resolved hostname {} for {}: {}", client_hostname, client_address, connection_id);
             }
             else
             {
-                LINFO("Could not resolve hostname for {}: {}", client_address, rev_res.error().message());
+                LINFO("Could not resolve hostname for {} at {}: {}", connection_id, client_address, rev_res.error().message());
             }
         }
 
@@ -77,10 +77,10 @@ namespace volcano::net
             co_await ssl_socket.async_handshake(boost::asio::ssl::stream_base::server, boost::asio::redirect_error(boost::asio::use_awaitable, ec));
             if (ec)
             {
-                LERROR("TLS handshake failed with {}: {}", client_hostname, ec.message());
+                LERROR("TLS handshake failed with {} at {}: {}", connection_id, client_hostname, ec.message());
                 co_return;
             }
-            LINFO("Completed TLS handshake with {}", client_hostname);
+            LINFO("Completed TLS handshake with {} at {}", connection_id, client_hostname);
             AnyStream stream(connection_id, std::move(ssl_socket), endpoint, client_hostname);
             co_await handle_client(std::move(stream));
         }

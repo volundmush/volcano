@@ -461,6 +461,11 @@ namespace volcano::telnet {
                 boost::system::error_code recv_ec;
                 co_await chan->async_receive(boost::asio::redirect_error(boost::asio::use_awaitable, recv_ec));
                 if(recv_ec) {
+
+                    if(recv_ec == boost::asio::error::operation_aborted) {
+                        co_return;
+                    }
+
                     LERROR("{} negotiation channel error: {}", *this, recv_ec.message());
                     co_return;
                 }
@@ -534,6 +539,7 @@ namespace volcano::telnet {
 
     std::shared_ptr<TelnetLink> TelnetConnection::make_link() const {
         auto link = std::make_shared<TelnetLink>();
+        link->connection_id = conn_.id();
         link->address = conn_.endpoint().address();
         link->hostname = conn_.hostname();
         link->client_data = client_data_;

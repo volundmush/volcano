@@ -121,12 +121,17 @@ namespace volcano::telnet {
     extern TelnetLimits telnet_limits;
 
     struct TelnetLink {
+        std::int64_t connection_id{0};
         boost::asio::ip::address address;
         std::string hostname;
         volcano::mud::ClientData client_data;
         std::shared_ptr<Channel<TelnetToGameMessage>> to_game;
         std::shared_ptr<Channel<TelnetToTelnetMessage>> to_telnet;
     };
+
+    inline auto format_as(const TelnetLink& telnet_link) {
+        return fmt::format("TelnetLink#{}({})", telnet_link.connection_id, telnet_link.address.to_string());
+    }
 
     class TelnetConnection;
     class TelnetOption;
