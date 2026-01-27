@@ -98,7 +98,7 @@ namespace volcano::portal {
     };
 
     extern std::function<std::shared_ptr<ModeHandler>(Client& client)> create_initial_mode_handler;
-    extern std::function<boost::asio::awaitable<void>(Client& client)> handle_refresh_timer, on_jwt_received;
+    extern std::function<boost::asio::awaitable<std::optional<JwtTokens>>(Client& client)> handle_refresh_timer;
 
     boost::asio::awaitable<void> handle_telnet(volcano::net::AnyStream&& stream);
     boost::asio::awaitable<void> run_portal_links();

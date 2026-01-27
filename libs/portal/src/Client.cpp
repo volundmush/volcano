@@ -13,7 +13,7 @@ namespace volcano::portal {
 
     volcano::web::HttpTarget target;
     std::function<std::shared_ptr<ModeHandler>(Client& client)> create_initial_mode_handler;
-    std::function<boost::asio::awaitable<void>(Client& client)> handle_refresh_timer, on_jwt_received;
+    std::function<boost::asio::awaitable<std::optional<JwtTokens>>(Client& client)> handle_refresh_timer;
 
     ModeHandler::ModeHandler(Client& client)
     : client_(client)
@@ -189,6 +189,7 @@ namespace volcano::portal {
     boost::asio::awaitable<void> Client::runRefresher()
     {
         if (!handle_refresh_timer) {
+            LERROR("No refresh handler configured for portal client refresher.");
             co_return;
         }
 
@@ -224,10 +225,18 @@ namespace volcano::portal {
             }
 
             if (!handle_refresh_timer) {
+                LERROR("No refresh handler configured for portal client refresher.");
                 co_return;
             }
 
-            co_await handle_refresh_timer(*this);
+            auto res = co_await handle_refresh_timer(*this);
+            if(res) {
+                tokens = std::move(*res);
+            } else {
+                tokens.reset();
+                // we should probably notify the mode handler here...
+                co_return;
+            }
         }
     }
 
