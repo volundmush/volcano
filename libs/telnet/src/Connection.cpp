@@ -684,8 +684,17 @@ namespace volcano::telnet {
             if(ec) {
                 LERROR("{} to_game channel error: {}", *this, ec.message());
             }
+        } else if(std::holds_alternative<TelnetMessageNegotiation>(data)) {
+            TelnetMessageNegotiation& msg = std::get<TelnetMessageNegotiation>(data);
+            co_await handleNegotiate(msg);
+        } else if(std::holds_alternative<TelnetMessageSubnegotiation>(data)) {
+            TelnetMessageSubnegotiation& msg = std::get<TelnetMessageSubnegotiation>(data);
+            co_await handleSubNegotiation(msg);
+        } else if(std::holds_alternative<TelnetMessageCommand>(data)) {
+            TelnetMessageCommand& msg = std::get<TelnetMessageCommand>(data);
+            co_await handleCommand(msg);
         } else {
-            // other message types are handled internally
+            // this shouldn't happen....
         }
 
         co_return;
