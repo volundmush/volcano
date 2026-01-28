@@ -640,16 +640,24 @@ namespace volcano::telnet {
     }
 
     boost::asio::awaitable<void> TelnetConnection::handleAppData(TelnetMessageData& app_data) {
-        append_data_buffer_ += app_data.data;
+        for (unsigned char ch : app_data.data) {
+            if (ch == 0x08 || ch == 0x7F) {
+                if (!append_data_buffer_.empty()) {
+                    append_data_buffer_.pop_back();
+                }
+                continue;
+            }
+            append_data_buffer_.push_back(static_cast<char>(ch));
 
-        if(append_data_buffer_.size() > telnet_limits.max_appdata_buffer) {
-            LERROR("{} appdata buffer exceeded limit ({} bytes).", *this, telnet_limits.max_appdata_buffer);
-            co_await sendAppData("Input line too long. Disconnecting.\r\n");
-            co_await sendToClient(TelnetDisconnect::appdata_overflow);
-            boost::system::error_code send_ec;
-            co_await to_game_messages_->async_send(send_ec, TelnetDisconnect::appdata_overflow, boost::asio::use_awaitable);
-            co_await volcano::net::waitForever(cancellation_signal_);
-            co_return;
+            if(append_data_buffer_.size() > telnet_limits.max_appdata_buffer) {
+                LERROR("{} appdata buffer exceeded limit ({} bytes).", *this, telnet_limits.max_appdata_buffer);
+                co_await sendAppData("Input line too long. Disconnecting.\r\n");
+                co_await sendToClient(TelnetDisconnect::appdata_overflow);
+                boost::system::error_code send_ec;
+                co_await to_game_messages_->async_send(send_ec, TelnetDisconnect::appdata_overflow, boost::asio::use_awaitable);
+                co_await volcano::net::waitForever(cancellation_signal_);
+                co_return;
+            }
         }
 
         auto send_line = [this](std::string line) -> boost::asio::awaitable<void> {

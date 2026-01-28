@@ -2,6 +2,8 @@
 #include "volcano/telnet/Connection.hpp"
 #include "volcano/log/Log.hpp"
 
+#include <boost/algorithm/string.hpp>
+
 #include <algorithm>
 #include <cctype>
 
@@ -268,10 +270,6 @@ namespace volcano::telnet {
 
     std::string CHARSETOption::getBaseChannelName() {
         return "CHARSET";
-    }
-
-    std::pair<bool, bool> CHARSETOption::getLocalSupportInfo() {
-        return {true, true};
     }
 
     std::pair<bool, bool> CHARSETOption::getRemoteSupportInfo() {
@@ -660,6 +658,19 @@ namespace volcano::telnet {
             }
         } else {
             parsed = nullptr;
+        }
+
+        if(boost::iequals(command, "Core.Hello")) {
+            if(parsed.is_object()) {
+                if(parsed.contains("client") && parsed["client"].is_string()) {
+                    std::string client_name = parsed["client"];
+                    std::string client_version = "UNKNOWN";
+                    if(parsed.contains("version") && parsed["version"].is_string()) {
+                        client_version = parsed["version"];
+                    }
+                    co_await tc.setClientName(client_name, client_version);
+                }
+            }
         }
 
         boost::system::error_code ec;
