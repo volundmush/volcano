@@ -23,8 +23,8 @@ namespace volcano::circle
     constexpr int COLOR_YOUSAY = 14;
     constexpr int COLOR_ROOMSAY = 15;
     
-    volcano::ansi::Text toText(std::string_view txt);
-    std::string processColors(std::string_view txt, int parse, char **choices);
+    volcano::ansi::Text toText(std::string_view txt, const std::unordered_map<uint8_t, std::string>& custom_colors = {});
+    std::string processColors(std::string_view txt, volcano::ansi::ColorMode mode = volcano::ansi::ColorMode::None, const std::unordered_map<uint8_t, std::string>& custom_colors = {});
     size_t countColors(std::string_view txt);
 
     bool isColorChar(char c);

@@ -25,7 +25,283 @@ namespace volcano::ansi {
             Rgb{0, 255, 255},   // bright cyan
             Rgb{255, 255, 255}  // bright white
         };
+
+        inline Color color_from_index(std::uint8_t index)
+        {
+            if (index < 16) {
+                return AnsiColor{index};
+            }
+            return XtermColor{index};
+        }
     }
+
+    const std::unordered_map<std::string, Color> named_colors = [] {
+        std::unordered_map<std::string, Color> map;
+
+        auto add_name = [&](std::string name, std::uint8_t index) {
+            map.emplace(name, color_from_index(index));
+
+            std::string hyphen = name;
+            std::string compact = name;
+
+            for (char& ch : hyphen) {
+                if (ch == '_') {
+                    ch = '-';
+                }
+            }
+
+            compact.erase(
+                std::remove_if(compact.begin(), compact.end(), [](char ch) {
+                    return ch == '_' || ch == '-';
+                }),
+                compact.end());
+
+            if (hyphen != name) {
+                map.emplace(hyphen, color_from_index(index));
+            }
+            if (compact != name) {
+                map.emplace(compact, color_from_index(index));
+            }
+        };
+
+        add_name("black", 0);
+        add_name("red", 1);
+        add_name("green", 2);
+        add_name("yellow", 3);
+        add_name("blue", 4);
+        add_name("magenta", 5);
+        add_name("cyan", 6);
+        add_name("white", 7);
+        add_name("bright_black", 8);
+        add_name("bright_red", 9);
+        add_name("bright_green", 10);
+        add_name("bright_yellow", 11);
+        add_name("bright_blue", 12);
+        add_name("bright_magenta", 13);
+        add_name("bright_cyan", 14);
+        add_name("bright_white", 15);
+        add_name("grey0", 16);
+        add_name("gray0", 16);
+        add_name("navy_blue", 17);
+        add_name("dark_blue", 18);
+        add_name("blue3", 20);
+        add_name("blue1", 21);
+        add_name("dark_green", 22);
+        add_name("deep_sky_blue4", 25);
+        add_name("dodger_blue3", 26);
+        add_name("dodger_blue2", 27);
+        add_name("green4", 28);
+        add_name("spring_green4", 29);
+        add_name("turquoise4", 30);
+        add_name("deep_sky_blue3", 32);
+        add_name("dodger_blue1", 33);
+        add_name("green3", 40);
+        add_name("spring_green3", 41);
+        add_name("dark_cyan", 36);
+        add_name("light_sea_green", 37);
+        add_name("deep_sky_blue2", 38);
+        add_name("deep_sky_blue1", 39);
+        add_name("spring_green2", 47);
+        add_name("cyan3", 43);
+        add_name("dark_turquoise", 44);
+        add_name("turquoise2", 45);
+        add_name("green1", 46);
+        add_name("spring_green1", 48);
+        add_name("medium_spring_green", 49);
+        add_name("cyan2", 50);
+        add_name("cyan1", 51);
+        add_name("dark_red", 88);
+        add_name("deep_pink4", 125);
+        add_name("purple4", 55);
+        add_name("purple3", 56);
+        add_name("blue_violet", 57);
+        add_name("orange4", 94);
+        add_name("grey37", 59);
+        add_name("gray37", 59);
+        add_name("medium_purple4", 60);
+        add_name("slate_blue3", 62);
+        add_name("royal_blue1", 63);
+        add_name("chartreuse4", 64);
+        add_name("dark_sea_green4", 71);
+        add_name("pale_turquoise4", 66);
+        add_name("steel_blue", 67);
+        add_name("steel_blue3", 68);
+        add_name("cornflower_blue", 69);
+        add_name("chartreuse3", 76);
+        add_name("cadet_blue", 73);
+        add_name("sky_blue3", 74);
+        add_name("steel_blue1", 81);
+        add_name("pale_green3", 114);
+        add_name("sea_green3", 78);
+        add_name("aquamarine3", 79);
+        add_name("medium_turquoise", 80);
+        add_name("chartreuse2", 112);
+        add_name("sea_green2", 83);
+        add_name("sea_green1", 85);
+        add_name("aquamarine1", 122);
+        add_name("dark_slate_gray2", 87);
+        add_name("dark_magenta", 91);
+        add_name("dark_violet", 128);
+        add_name("purple", 129);
+        add_name("light_pink4", 95);
+        add_name("plum4", 96);
+        add_name("medium_purple3", 98);
+        add_name("slate_blue1", 99);
+        add_name("yellow4", 106);
+        add_name("wheat4", 101);
+        add_name("grey53", 102);
+        add_name("gray53", 102);
+        add_name("light_slate_grey", 103);
+        add_name("light_slate_gray", 103);
+        add_name("medium_purple", 104);
+        add_name("light_slate_blue", 105);
+        add_name("dark_olive_green3", 149);
+        add_name("dark_sea_green", 108);
+        add_name("light_sky_blue3", 110);
+        add_name("sky_blue2", 111);
+        add_name("dark_sea_green3", 150);
+        add_name("dark_slate_gray3", 116);
+        add_name("sky_blue1", 117);
+        add_name("chartreuse1", 118);
+        add_name("light_green", 120);
+        add_name("pale_green1", 156);
+        add_name("dark_slate_gray1", 123);
+        add_name("red3", 160);
+        add_name("medium_violet_red", 126);
+        add_name("magenta3", 164);
+        add_name("dark_orange3", 166);
+        add_name("indian_red", 167);
+        add_name("hot_pink3", 168);
+        add_name("medium_orchid3", 133);
+        add_name("medium_orchid", 134);
+        add_name("medium_purple2", 140);
+        add_name("dark_goldenrod", 136);
+        add_name("light_salmon3", 173);
+        add_name("rosy_brown", 138);
+        add_name("grey63", 139);
+        add_name("gray63", 139);
+        add_name("medium_purple1", 141);
+        add_name("gold3", 178);
+        add_name("dark_khaki", 143);
+        add_name("navajo_white3", 144);
+        add_name("grey69", 145);
+        add_name("gray69", 145);
+        add_name("light_steel_blue3", 146);
+        add_name("light_steel_blue", 147);
+        add_name("yellow3", 184);
+        add_name("dark_sea_green2", 157);
+        add_name("light_cyan3", 152);
+        add_name("light_sky_blue1", 153);
+        add_name("green_yellow", 154);
+        add_name("dark_olive_green2", 155);
+        add_name("dark_sea_green1", 193);
+        add_name("pale_turquoise1", 159);
+        add_name("deep_pink3", 162);
+        add_name("magenta2", 200);
+        add_name("hot_pink2", 169);
+        add_name("orchid", 170);
+        add_name("medium_orchid1", 207);
+        add_name("orange3", 172);
+        add_name("light_pink3", 174);
+        add_name("pink3", 175);
+        add_name("plum3", 176);
+        add_name("violet", 177);
+        add_name("light_goldenrod3", 179);
+        add_name("tan", 180);
+        add_name("misty_rose3", 181);
+        add_name("thistle3", 182);
+        add_name("plum2", 183);
+        add_name("khaki3", 185);
+        add_name("light_goldenrod2", 222);
+        add_name("light_yellow3", 187);
+        add_name("grey84", 188);
+        add_name("gray84", 188);
+        add_name("light_steel_blue1", 189);
+        add_name("yellow2", 190);
+        add_name("dark_olive_green1", 192);
+        add_name("honeydew2", 194);
+        add_name("light_cyan1", 195);
+        add_name("red1", 196);
+        add_name("deep_pink2", 197);
+        add_name("deep_pink1", 199);
+        add_name("magenta1", 201);
+        add_name("orange_red1", 202);
+        add_name("indian_red1", 204);
+        add_name("hot_pink", 206);
+        add_name("dark_orange", 208);
+        add_name("salmon1", 209);
+        add_name("light_coral", 210);
+        add_name("pale_violet_red1", 211);
+        add_name("orchid2", 212);
+        add_name("orchid1", 213);
+        add_name("orange1", 214);
+        add_name("sandy_brown", 215);
+        add_name("light_salmon1", 216);
+        add_name("light_pink1", 217);
+        add_name("pink1", 218);
+        add_name("plum1", 219);
+        add_name("gold1", 220);
+        add_name("navajo_white1", 223);
+        add_name("misty_rose1", 224);
+        add_name("thistle1", 225);
+        add_name("yellow1", 226);
+        add_name("light_goldenrod1", 227);
+        add_name("khaki1", 228);
+        add_name("wheat1", 229);
+        add_name("cornsilk1", 230);
+        add_name("grey100", 231);
+        add_name("gray100", 231);
+        add_name("grey3", 232);
+        add_name("gray3", 232);
+        add_name("grey7", 233);
+        add_name("gray7", 233);
+        add_name("grey11", 234);
+        add_name("gray11", 234);
+        add_name("grey15", 235);
+        add_name("gray15", 235);
+        add_name("grey19", 236);
+        add_name("gray19", 236);
+        add_name("grey23", 237);
+        add_name("gray23", 237);
+        add_name("grey27", 238);
+        add_name("gray27", 238);
+        add_name("grey30", 239);
+        add_name("gray30", 239);
+        add_name("grey35", 240);
+        add_name("gray35", 240);
+        add_name("grey39", 241);
+        add_name("gray39", 241);
+        add_name("grey42", 242);
+        add_name("gray42", 242);
+        add_name("grey46", 243);
+        add_name("gray46", 243);
+        add_name("grey50", 244);
+        add_name("gray50", 244);
+        add_name("grey54", 245);
+        add_name("gray54", 245);
+        add_name("grey58", 246);
+        add_name("gray58", 246);
+        add_name("grey62", 247);
+        add_name("gray62", 247);
+        add_name("grey66", 248);
+        add_name("gray66", 248);
+        add_name("grey70", 249);
+        add_name("gray70", 249);
+        add_name("grey74", 250);
+        add_name("gray74", 250);
+        add_name("grey78", 251);
+        add_name("gray78", 251);
+        add_name("grey82", 252);
+        add_name("gray82", 252);
+        add_name("grey85", 253);
+        add_name("gray85", 253);
+        add_name("grey89", 254);
+        add_name("gray89", 254);
+        add_name("grey93", 255);
+        add_name("gray93", 255);
+
+        return map;
+    }();
 
     Style::Style() = default;
 

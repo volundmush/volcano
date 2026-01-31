@@ -3,6 +3,7 @@
 #include <optional>
 #include <string>
 #include <variant>
+#include <unordered_map>
 #include <enchantum/bitflags.hpp>
 #include <enchantum/bitset.hpp>
 #include <enchantum/bitwise_operators.hpp>
@@ -103,7 +104,7 @@ namespace volcano::ansi {
     [[nodiscard]] std::string to_ansi_escape(const Style& style, ColorMode mode);
 
      
-
+    extern const std::unordered_map<std::string, Color> named_colors;
 
 
 }

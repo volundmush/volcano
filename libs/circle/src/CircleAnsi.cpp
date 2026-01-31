@@ -1,5 +1,9 @@
 #include "volcano/circle/CircleAnsi.hpp"
 
+#include <charconv>
+#include <cctype>
+#include <string>
+
 #define ANSISTART "\x1B["
 #define ANSISEP ';'
 #define ANSISEPSTR ";"
@@ -35,187 +39,334 @@
 namespace volcano::circle
 {
 
-    namespace
-    {
-        const char RANDOM_COLORS[] = "bgcrmywBGCRMWY";
+    constexpr std::string_view RANDOM_COLORS = "bgcrmywBGCRMWY";
+    
+    volcano::ansi::Text toText(std::string_view txt, const std::unordered_map<uint8_t, std::string>& custom_colors) {
+        volcano::ansi::Text result;
+        std::string buffer;
+        std::optional<volcano::ansi::Style> current_style;
 
-        const char *ANSI[] = {
-            "@",
-            AA_NORMAL,
-            AA_NORMAL ANSISEPSTR AF_BLACK,
-            AA_NORMAL ANSISEPSTR AF_BLUE,
-            AA_NORMAL ANSISEPSTR AF_GREEN,
-            AA_NORMAL ANSISEPSTR AF_CYAN,
-            AA_NORMAL ANSISEPSTR AF_RED,
-            AA_NORMAL ANSISEPSTR AF_MAGENTA,
-            AA_NORMAL ANSISEPSTR AF_YELLOW,
-            AA_NORMAL ANSISEPSTR AF_WHITE,
-            AA_BOLD ANSISEPSTR AF_BLACK,
-            AA_BOLD ANSISEPSTR AF_BLUE,
-            AA_BOLD ANSISEPSTR AF_GREEN,
-            AA_BOLD ANSISEPSTR AF_CYAN,
-            AA_BOLD ANSISEPSTR AF_RED,
-            AA_BOLD ANSISEPSTR AF_MAGENTA,
-            AA_BOLD ANSISEPSTR AF_YELLOW,
-            AA_BOLD ANSISEPSTR AF_WHITE,
-            AB_BLACK,
-            AB_BLUE,
-            AB_GREEN,
-            AB_CYAN,
-            AB_RED,
-            AB_MAGENTA,
-            AB_YELLOW,
-            AB_WHITE,
-            AA_BLINK,
-            AA_UNDERLINE,
-            AA_BOLD,
-            AA_REVERSE,
-            "!"};
+        auto handle_end = [&]() {
+            if(!buffer.empty()) {
+                result.append(buffer, current_style);
+                buffer.clear();
+            }
+        };
 
-        const char CCODE[] = "@ndbgcrmywDBGCRMYW01234567luoex!";
+        auto enable_attribute = [&](volcano::ansi::Attribute attribute) {
+            handle_end();
+            if(!current_style) {
+                current_style = volcano::ansi::Style{};
+            }
+            current_style->add_attributes(attribute);
+        };
 
-        constexpr int NUM_COLOR = 16;
+        auto enable_ansi_color = [&](char code, bool bold, bool background) {
+            handle_end();
+            if(!current_style) {
+                current_style = volcano::ansi::Style{};
+            }
+            volcano::ansi::Color color;
+            switch(code) {
+                case 'd': case '0': color = volcano::ansi::named_colors.at("black"); break;
+                case 'b': case '1': color = volcano::ansi::named_colors.at("blue"); break;
+                case 'g': case '2': color = volcano::ansi::named_colors.at("green"); break;
+                case 'c': case '3': color = volcano::ansi::named_colors.at("cyan"); break;
+                case 'r': case '4': color = volcano::ansi::named_colors.at("red"); break;
+                case 'm': case '5': color = volcano::ansi::named_colors.at("magenta"); break;
+                case 'y': case '6': color = volcano::ansi::named_colors.at("yellow"); break;
+                case 'w': case '7': color = volcano::ansi::named_colors.at("white"); break;
+                default: return;
+            }
+            if(background) {
+                current_style->set_background(color);
+            } else {
+                current_style->set_foreground(color);
+            }
+            if(bold) {
+                current_style->add_attributes(volcano::ansi::Attribute::Bold);
+            }
+        };
 
-        const char *default_color_choices[NUM_COLOR + 1] = {
-            /* COLOR_NORMAL */ AA_NORMAL,
-            /* COLOR_ROOMNAME */ AA_NORMAL ANSISEPSTR AF_CYAN,
-            /* COLOR_ROOMOBJS */ AA_NORMAL ANSISEPSTR AF_GREEN,
-            /* COLOR_ROOMPEOPLE */ AA_NORMAL ANSISEPSTR AF_YELLOW,
-            /* COLOR_HITYOU */ AA_NORMAL ANSISEPSTR AF_RED,
-            /* COLOR_YOUHIT */ AA_NORMAL ANSISEPSTR AF_GREEN,
-            /* COLOR_OTHERHIT */ AA_NORMAL ANSISEPSTR AF_YELLOW,
-            /* COLOR_CRITICAL */ AA_BOLD ANSISEPSTR AF_YELLOW,
-            /* COLOR_HOLLER */ AA_BOLD ANSISEPSTR AF_YELLOW,
-            /* COLOR_SHOUT */ AA_BOLD ANSISEPSTR AF_YELLOW,
-            /* COLOR_GOSSIP */ AA_NORMAL ANSISEPSTR AF_YELLOW,
-            /* COLOR_AUCTION */ AA_NORMAL ANSISEPSTR AF_CYAN,
-            /* COLOR_CONGRAT */ AA_NORMAL ANSISEPSTR AF_GREEN,
-            /* COLOR_TELL */ AA_NORMAL ANSISEPSTR AF_RED,
-            /* COLOR_YOUSAY */ AA_NORMAL ANSISEPSTR AF_CYAN,
-            /* COLOR_ROOMSAY */ AA_NORMAL ANSISEPSTR AF_WHITE,
-            nullptr};
-    }
+        auto handle_user_color = [&](int color_index) {
+            handle_end();
+            if(!current_style) {
+                current_style = volcano::ansi::Style{};
+            }
+            auto it = custom_colors.find(static_cast<uint8_t>(color_index));
+            volcano::ansi::Color color;
+            if(it != custom_colors.end()) {
+                auto named_it = volcano::ansi::named_colors.find(it->second);
+                if(named_it != volcano::ansi::named_colors.end()) {
+                    color = named_it->second;
+                } else {
+                    color = volcano::ansi::named_colors.at("black");
+                }
+            } else {
+                color = volcano::ansi::named_colors.at("black");
+            }
+            current_style->set_foreground(color);
+        };
 
-    volcano::ansi::Text toText(std::string_view txt) {
-        // Convert a string with Circle color codes into a volcano::ansi::Text object.
-    }
-
-    // A C++ version of proc_color from comm.c. it returns the colored string.
-    std::string processColors(std::string_view txt, int parse, char **choices)
-    {
-        const char *color_char;
-        const char *replacement = nullptr;
-        int i, temp_color;
-
-        if (txt.empty() || txt.find('@') == std::string_view::npos) /* skip out if no color codes     */
-            return std::string(txt);
-
-        std::string out;
-        for (size_t pos = 0; pos < txt.size();)
-        {
-            /* no color code - just copy */
-            if (txt[pos] != '@')
-            {
-                out.push_back(txt[pos++]);
-                continue;
+        auto handle_expanded_color = [&](std::string_view sub) {
+            // sub is either a name (no spaces), a number, or r,g,b
+            // if we can't resolve it, we treat it as ansi black.
+            handle_end();
+            if(!current_style) {
+                current_style = volcano::ansi::Style{};
             }
 
-            /* if we get here we have a color code */
+            auto set_black = [&]() {
+                current_style->set_foreground(volcano::ansi::named_colors.at("black"));
+            };
 
-            pos++; /* now points to the code */
-            if (pos >= txt.size())
-            {
-                out.push_back('@');
+            auto trim = [](std::string_view view) -> std::string_view {
+                std::size_t start = 0;
+                std::size_t end = view.size();
+                while(start < end && std::isspace(static_cast<unsigned char>(view[start]))) {
+                    ++start;
+                }
+                while(end > start && std::isspace(static_cast<unsigned char>(view[end - 1]))) {
+                    --end;
+                }
+                return view.substr(start, end - start);
+            };
+
+            sub = trim(sub);
+            if(sub.empty()) {
+                set_black();
+                return;
+            }
+
+            auto parse_int = [&](std::string_view view, int& value) -> bool {
+                view = trim(view);
+                if(view.empty()) {
+                    return false;
+                }
+                int tmp = 0;
+                auto result = std::from_chars(view.data(), view.data() + view.size(), tmp);
+                if(result.ec != std::errc{} || result.ptr != view.data() + view.size()) {
+                    return false;
+                }
+                value = tmp;
+                return true;
+            };
+
+            auto comma_pos = sub.find(',');
+            if(comma_pos != std::string_view::npos) {
+                int r = 0;
+                int g = 0;
+                int b = 0;
+                auto second = sub.find(',', comma_pos + 1);
+                if(second == std::string_view::npos) {
+                    set_black();
+                    return;
+                }
+                if(!parse_int(sub.substr(0, comma_pos), r) ||
+                   !parse_int(sub.substr(comma_pos + 1, second - comma_pos - 1), g) ||
+                   !parse_int(sub.substr(second + 1), b)) {
+                    set_black();
+                    return;
+                }
+                if(r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
+                    set_black();
+                    return;
+                }
+                current_style->set_foreground(volcano::ansi::TrueColor{
+                    static_cast<std::uint8_t>(r),
+                    static_cast<std::uint8_t>(g),
+                    static_cast<std::uint8_t>(b)});
+                return;
+            }
+
+            int index = 0;
+            if(parse_int(sub, index)) {
+                if(index < 0 || index > 255) {
+                    set_black();
+                    return;
+                }
+                if(index < 16) {
+                    current_style->set_foreground(volcano::ansi::AnsiColor{static_cast<std::uint8_t>(index)});
+                } else {
+                    current_style->set_foreground(volcano::ansi::XtermColor{static_cast<std::uint8_t>(index)});
+                }
+                return;
+            }
+
+            std::string name(sub.begin(), sub.end());
+            for(char& ch : name) {
+                if(ch == ' ') {
+                    ch = '_';
+                } else {
+                    ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                }
+            }
+
+            auto it = volcano::ansi::named_colors.find(name);
+            if(it == volcano::ansi::named_colors.end()) {
+                set_black();
+                return;
+            }
+            current_style->set_foreground(it->second);
+        };
+
+        std::size_t pos = 0;
+        while(true) {
+            if(pos >= txt.size()) { // end of string reached, so terminate.
+                handle_end();
+                break;
+            }
+            if(txt[pos] != '@') { // normal character, append to buffer.
+                buffer.push_back(txt[pos++]);
+                continue;
+            }
+            // we found a color code
+            pos++;
+
+            if(pos >= txt.size()) {
+                // we reached the end of the string, so we treat it as a literal '@'
+                buffer.push_back('@');
+                handle_end();
                 break;
             }
 
             char code = txt[pos];
-
-            /* look for a random color code picks a random number between 1 and 14 */
-            if (code == 'x')
-            {
-                temp_color = (rand() % 14);
-                code = RANDOM_COLORS[temp_color];
-            }
-
-            if (!parse)
-            { /* not parsing, just skip the code, unless it's @@ */
-                if (code == '@')
-                {
-                    out.push_back('@');
-                }
-                if (code == '[')
-                { /* Multi-character code */
+            switch(code) {
+                case '@': {
+                    // escaped @
+                    buffer.push_back('@');
                     pos++;
-                    while (pos < txt.size() && isdigit(static_cast<unsigned char>(txt[pos])))
-                        pos++;
-                    if (pos >= txt.size())
-                        pos = txt.size() - 1;
+                    continue;
                 }
-                pos++; /* skip to next (non-colorcode) char */
-                continue;
-            }
-
-            /* parse the color code */
-            if (code == '[')
-            { /* User configurable color */
-                pos++;
-                if (pos < txt.size())
-                {
-                    i = atoi(txt.data() + pos);
-                    if (i < 0 || i >= NUM_COLOR)
-                        i = COLOR_NORMAL;
-                    replacement = default_color_choices[i];
-                    if (choices && choices[i])
-                        replacement = choices[i];
-                    while (pos < txt.size() && isdigit(static_cast<unsigned char>(txt[pos])))
-                        pos++;
-                    if (pos >= txt.size())
-                        pos = txt.size() - 1;
+                case 'n': { // ansi reset.
+                    handle_end();
+                    current_style = std::nullopt;
+                    pos++;
+                    continue;
                 }
-            }
-            else if (code == 'n')
-            {
-                replacement = default_color_choices[COLOR_NORMAL];
-                if (choices && choices[COLOR_NORMAL])
-                    replacement = choices[COLOR_NORMAL];
-            }
-            else
-            {
-                for (i = 0; CCODE[i] != '!'; i++)
-                { /* do we find it ? */
-                    if (code == CCODE[i])
-                    { /* if so :*/
-                        replacement = ANSI[i];
-                        break;
+                case 'd':
+                case 'b':
+                case 'g':
+                case 'c':
+                case 'r':
+                case 'm':
+                case 'y':
+                case 'w': {
+                    // normal ansi codes
+                    enable_ansi_color(code, false, false);
+                    pos++;
+                    continue;
+                }
+                case 'D':
+                case 'B':
+                case 'G':
+                case 'C':
+                case 'R':
+                case 'M':
+                case 'Y':
+                case 'W': {
+                    // normal ansi with bold enabled.
+                    enable_ansi_color(tolower(code), true, false);
+                    pos++;
+                    continue;
+                }
+                case '0':
+                case '1':
+                case '2':
+                case '3':
+                case '4':
+                case '5':
+                case '6':
+                case '7': {
+                    // background colors
+                    enable_ansi_color(code, false, true);
+                    pos++;
+                    continue;
+                }
+                case 'l': { // enable blink
+                    enable_attribute(volcano::ansi::Attribute::Blink);
+                    pos++;
+                    continue;
+                }
+                case 'o': { // enable bold
+                    enable_attribute(volcano::ansi::Attribute::Bold);
+                    pos++;
+                    continue;
+                }
+                case 'u': { // enable underline
+                    enable_attribute(volcano::ansi::Attribute::Underline);
+                    pos++;
+                    continue;
+                }
+                case 'e': { // enable reverse
+                    enable_attribute(volcano::ansi::Attribute::Reverse);
+                    pos++;
+                    continue;
+                }
+                case 'x': { // random color
+                    char random_code = RANDOM_COLORS[rand() % (sizeof(RANDOM_COLORS) - 1)];
+                    enable_ansi_color(tolower(random_code), isupper(random_code), false);
+                    pos++;
+                    continue;
+                } 
+                case '[': { // user-defined color
+                    // a user-defined color is of the form @[<number>, so we must find the end of the number.
+                    auto start = pos + 1;
+                    auto end = start;
+                    while(true) {
+                        if(end >= txt.size() || !isdigit(static_cast<unsigned char>(txt[end]))) {
+                            break;
+                        }
+                        end++;
                     }
+                    if(start == end) {
+                        // no digits found.
+                        pos++;
+                        continue;
+                    }
+                    // we have a number
+                    int color_index = atoi(std::string(txt.substr(start, end - start)).c_str());
+                    pos = end;
+                    handle_user_color(color_index);
+                    continue;
+                }
+                case '<': { // XTERM or TRUECOLOR, which is in the formats: @<name>, @<number>, or @<r,g,b>
+                    auto start = pos + 1;
+                    auto end = start;
+                    // find terminating '>'. if none found, ignore.
+                    while(true) {
+                        if(end >= txt.size() || txt[end] == '>') {
+                            break;
+                        }
+                        end++;
+                    }
+                    if(end >= txt.size() || txt[end] != '>') {
+                        // no terminating '>' found, ignore.
+                        pos++;
+                        continue;
+                    }
+                    pos = end + 1;
+                    auto sub = txt.substr(start, end - start);
+                    handle_expanded_color(sub);
+                    continue;
                 }
             }
-            if (replacement)
-            {
-                if (isdigit(replacement[0]))
-                    for (color_char = ANSISTART; *color_char;)
-                        out.push_back(*color_char++);
-                for (color_char = replacement; *color_char;)
-                    out.push_back(*color_char++);
-                if (isdigit(replacement[0]))
-                    out.push_back(ANSIEND);
-                replacement = nullptr;
-            }
-            /* If we couldn't find any correct color code, or we found it and
-             * substituted above, let's just process the next character.
-             * - Welcor
-             */
-            pos++;
+        }
 
-        } /* for loop */
+        return result;
+    }
 
-        return out;
+    // A C++ version of proc_color from comm.c. it returns the colored string.
+    std::string processColors(std::string_view txt, volcano::ansi::ColorMode mode, const std::unordered_map<uint8_t, std::string>& custom_colors)
+    {
+        auto text = toText(txt, custom_colors);
+        return volcano::ansi::render(text, mode);
     }
 
     size_t countColors(std::string_view txt)
     {
-        auto stripped = processColors(txt, false, nullptr);
+        auto text = toText(txt);
+        auto stripped = text.plain();
         return txt.size() - stripped.size();
     }
 
