@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <string_view>
+#include "volcano/ansi/Text.hpp"
 
 namespace volcano::circle
 {
@@ -22,6 +23,7 @@ namespace volcano::circle
     constexpr int COLOR_YOUSAY = 14;
     constexpr int COLOR_ROOMSAY = 15;
     
+    volcano::ansi::Text toText(std::string_view txt);
     std::string processColors(std::string_view txt, int parse, char **choices);
     size_t countColors(std::string_view txt);
 

@@ -96,6 +96,10 @@ namespace volcano::circle
             nullptr};
     }
 
+    volcano::ansi::Text toText(std::string_view txt) {
+        // Convert a string with Circle color codes into a volcano::ansi::Text object.
+    }
+
     // A C++ version of proc_color from comm.c. it returns the colored string.
     std::string processColors(std::string_view txt, int parse, char **choices)
     {

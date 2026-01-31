@@ -116,6 +116,7 @@ namespace volcano::telnet {
     struct TelnetLimits {
         std::size_t max_message_buffer{2 * 1024 * 1024};
         std::size_t max_appdata_buffer{64 * 1024};
+        boost::asio::steady_timer::duration negotiation_timeout{std::chrono::milliseconds(700)};
     };
 
     extern TelnetLimits telnet_limits;

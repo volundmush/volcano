@@ -69,6 +69,7 @@ add_subdirectory(libs/circle)
 add_subdirectory(libs/telnet)
 add_subdirectory(libs/config)
 add_subdirectory(libs/portal)
+add_subdirectory(libs/ansi)
 
 # Optional alias for convenience
 set(VOLCANO_TARGETS
@@ -84,6 +85,7 @@ set(VOLCANO_TARGETS
   volcano_telnet
   volcano_config
   volcano_portal
+  volcano_ansi
 )
 
 if(VOLCANO_ENABLE_INSTALL)

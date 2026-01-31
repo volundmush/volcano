@@ -332,7 +332,7 @@ namespace volcano::telnet {
 
     boost::asio::awaitable<void> TelnetConnection::runLink() {
         try {
-            co_await negotiateOptions(negotiation_timeout_);
+            co_await negotiateOptions();
             negotiation_completed_ = true;
 
             auto link = make_link();
@@ -494,12 +494,12 @@ namespace volcano::telnet {
         }
     }
 
-    boost::asio::awaitable<void> TelnetConnection::negotiateOptions(boost::asio::steady_timer::duration negotiation_timeout) {
+    boost::asio::awaitable<void> TelnetConnection::negotiateOptions() {
         using namespace boost::asio::experimental::awaitable_operators;
 
         auto exec = co_await boost::asio::this_coro::executor;
         boost::asio::steady_timer deadline(exec);
-        deadline.expires_after(negotiation_timeout);
+        deadline.expires_after(telnet_limits.negotiation_timeout);
 
         auto wait_all = [this]() -> boost::asio::awaitable<void> {
             for(auto& chan : pending_channels_) {
@@ -595,13 +595,6 @@ namespace volcano::telnet {
     Channel<std::shared_ptr<TelnetLink>>& link_channel() {
         static Channel<std::shared_ptr<TelnetLink>> channel(volcano::net::context(), 256);
         return channel;
-    }
-
-    boost::asio::awaitable<void> handle_linked_telnet(volcano::net::AnyStream&& stream,
-        boost::asio::steady_timer::duration negotiation_timeout) {
-        auto telnet = std::make_shared<TelnetConnection>(std::move(stream));
-        telnet->set_negotiation_timeout(negotiation_timeout);
-        co_await telnet->run();
     }
 
     boost::asio::awaitable<void> TelnetConnection::setClientName(const std::string& name, const std::string& version) {

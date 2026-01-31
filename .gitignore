@@ -85,3 +85,5 @@ config.user.toml
 
 .env.local
 aiodmudtelnet/
+
+rich/

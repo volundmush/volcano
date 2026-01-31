@@ -1,9 +1,9 @@
-add_library(volcano_circle STATIC)
-add_library(volcano::circle ALIAS volcano_circle)
+add_library(volcano_ansi STATIC)
+add_library(volcano::ansi ALIAS volcano_ansi)
 
-target_compile_features(volcano_circle PUBLIC cxx_std_23)
+target_compile_features(volcano_ansi PUBLIC cxx_std_23)
 
-target_include_directories(volcano_circle
+target_include_directories(volcano_ansi
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
@@ -16,15 +16,15 @@ file(GLOB_RECURSE SRC
 )
 
 file(GLOB_RECURSE INCLUDE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/volcano/circle/*.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/volcano/ansi/*.hpp
 )
 
-target_precompile_headers(volcano_circle
+target_precompile_headers(volcano_ansi
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/private/pch.hpp
 )
 
-target_sources(volcano_circle
+target_sources(volcano_ansi
     PRIVATE
         ${SRC}
     PUBLIC
@@ -34,7 +34,7 @@ target_sources(volcano_circle
         ${INCLUDE}
 )
 
-target_link_libraries(volcano_circle
-  PUBLIC
-    volcano::ansi
+target_link_libraries(volcano_ansi
+   PUBLIC
+    enchantum::enchantum
 )
