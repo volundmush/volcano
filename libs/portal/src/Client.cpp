@@ -289,6 +289,21 @@ namespace volcano::portal {
         }
     }
 
+    boost::asio::awaitable<void> Client::sendMSSP(const std::vector<std::pair<std::string, std::string>>& mssp_data)
+    {
+        if (!link_ || !link_->to_telnet) {
+            co_return;
+        }
+        boost::system::error_code ec;
+        co_await link_->to_telnet->async_send(
+            ec,
+            volcano::telnet::TelnetMessageMSSP{mssp_data},
+            boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+        if(ec) {
+            LERROR("Failed to send MSSP to telnet link {}: {}", *link_, ec.message());
+        }
+    }
+
     boost::asio::awaitable<void> Client::enqueueMode(std::shared_ptr<ModeHandler> next)
     {
         boost::system::error_code ec;
