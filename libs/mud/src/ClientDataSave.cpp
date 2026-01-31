@@ -13,6 +13,7 @@ void to_json(nlohmann::json& j, const ClientData& capabilities) {
     j[+"color"] = capabilities.color;
     j[+"width"] = capabilities.width;
     j[+"height"] = capabilities.height;
+    j[+"mssp"] = capabilities.mssp;
     j[+"mccp2"] = capabilities.mccp2;
     j[+"mccp2_enabled"] = capabilities.mccp2_enabled;
     j[+"mccp3"] = capabilities.mccp3;
@@ -42,6 +43,7 @@ void from_json(const nlohmann::json& j, ClientData& capabilities) {
     if(j.contains(+"color")) j.at(+"color").get_to(capabilities.color);
     if(j.contains(+"width")) j.at(+"width").get_to(capabilities.width);
     if(j.contains(+"height")) j.at(+"height").get_to(capabilities.height);
+    if(j.contains(+"mssp")) j.at(+"mssp").get_to(capabilities.mssp);
     if(j.contains(+"mccp2")) j.at(+"mccp2").get_to(capabilities.mccp2);
     if(j.contains(+"mccp2_enabled")) j.at(+"mccp2_enabled").get_to(capabilities.mccp2_enabled);
     if(j.contains(+"mccp3")) j.at(+"mccp3").get_to(capabilities.mccp3);

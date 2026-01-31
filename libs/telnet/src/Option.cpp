@@ -531,6 +531,7 @@ namespace volcano::telnet {
 
     boost::asio::awaitable<void> MSSPOption::at_local_enable() {
         co_await TelnetOption::markNegotiationComplete(getBaseChannelName());
+        client_data().mssp = true;
         nlohmann::json capabilities;
         capabilities["mssp"] = true;
         co_await notifyChangedCapabilities(capabilities);

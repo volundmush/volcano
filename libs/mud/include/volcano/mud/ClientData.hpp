@@ -14,6 +14,7 @@ namespace volcano::mud
         uint8_t color = 0;
         uint16_t width = 78;
         uint16_t height = 24;
+        bool mssp = false;
         bool mccp2 = false;
         bool mccp2_enabled = false;
         bool mccp3 = false;
