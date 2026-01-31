@@ -328,23 +328,8 @@ namespace volcano::telnet {
         return "MTTS";
     }
 
-    std::pair<bool, bool> MTTSOption::getLocalSupportInfo() {
-        return {true, true};
-    }
-
     std::pair<bool, bool> MTTSOption::getRemoteSupportInfo() {
         return {true, true};
-    }
-
-    boost::asio::awaitable<void> MTTSOption::at_local_enable() {
-        client_data().mtts = true;
-        nlohmann::json capabilities;
-        capabilities["mtts"] = true;
-        co_await notifyChangedCapabilities(capabilities);
-        if (number_requests_ == 0) {
-            co_await request();
-        }
-        co_return;
     }
 
     boost::asio::awaitable<void> MTTSOption::at_remote_enable() {

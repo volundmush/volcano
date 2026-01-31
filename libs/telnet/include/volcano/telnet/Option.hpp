@@ -101,9 +101,7 @@ namespace volcano::telnet {
         using TelnetOption::TelnetOption;
         char option_code() const override;
         std::string getBaseChannelName() override;
-        std::pair<bool, bool> getLocalSupportInfo() override;
         std::pair<bool, bool> getRemoteSupportInfo() override;
-        boost::asio::awaitable<void> at_local_enable() override;
         boost::asio::awaitable<void> at_remote_enable() override;
         boost::asio::awaitable<void> at_receive_subnegotiate(std::string_view data) override;
 
