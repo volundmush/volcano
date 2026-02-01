@@ -4,6 +4,8 @@
 #include <string_view>
 #include <unordered_map>
 #include <stdexcept>
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 
 namespace volcano::mud {
     class CommandData {
@@ -25,6 +27,16 @@ namespace volcano::mud {
     bool equals_present;
     std::unordered_map<std::string, std::string> variables;
 };
+
+auto inline format_as(const CommandData& cmd_data) {
+    return fmt::format("CommandData(cmd='{}', switches=[{}], switch_mod='{}', argument='{}', lsargs='{}', rsargs='{}')",
+        cmd_data.cmd,
+        fmt::join(cmd_data.switches, ", "),
+        cmd_data.switch_mod,
+        cmd_data.argument,
+        cmd_data.lsargs,
+        cmd_data.rsargs);
+}
 
 class CommandError : public std::runtime_error {
 public:
