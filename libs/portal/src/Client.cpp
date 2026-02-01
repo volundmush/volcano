@@ -175,7 +175,8 @@ namespace volcano::portal {
             }
 
             if(!next) {
-                continue;
+                LINFO("{} mode handler channel closed, exiting runMode.", *this);
+                co_return;
             }
 
             mode_handler_ = std::move(next);
@@ -308,6 +309,21 @@ namespace volcano::portal {
             boost::asio::redirect_error(boost::asio::use_awaitable, ec));
         if(ec) {
             LERROR("Failed to send MSSP to telnet link {}: {}", *link_, ec.message());
+        }
+    }
+
+    boost::asio::awaitable<void> Client::sendDisconnect()
+    {
+        if (!link_ || !link_->to_telnet) {
+            co_return;
+        }
+        boost::system::error_code ec;
+        co_await link_->to_telnet->async_send(
+            ec,
+            volcano::telnet::TelnetDisconnect{},
+            boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+        if(ec) {
+            LERROR("Failed to send Disconnect to telnet link {}: {}", *link_, ec.message());
         }
     }
 
