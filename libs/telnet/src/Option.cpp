@@ -657,15 +657,24 @@ namespace volcano::telnet {
                     co_await tc.setClientName(client_name, client_version);
                 }
             }
-        }
-
-        boost::system::error_code ec;
-        co_await tc.to_game_channel().async_send(
-            ec,
-            TelnetMessageGMCP{std::move(command), std::move(parsed)},
-            boost::asio::use_awaitable);
-        if (ec) {
-            LERROR("{} gmcp to_game channel error: {}", tc, ec.message());
+        } else if (boost::iequals(command, "Core.Supports.Set")) {
+            if(parsed.is_array()) {
+                auto& gmcp_supports_set = client_data().gmcp_supports_set;
+                gmcp_supports_set.clear();
+                parsed.get_to(gmcp_supports_set);
+                nlohmann::json capabilities;
+                capabilities["gmcp_supports_set"] = gmcp_supports_set;
+                co_await notifyChangedCapabilities(capabilities);
+            }
+        } else {
+            boost::system::error_code ec;
+            co_await tc.to_game_channel().async_send(
+                ec,
+                TelnetMessageGMCP{std::move(command), std::move(parsed)},
+                boost::asio::use_awaitable);
+            if (ec) {
+                LERROR("{} gmcp to_game channel error: {}", tc, ec.message());
+            }
         }
         co_return;
     }

@@ -10,6 +10,7 @@
 #include <memory>
 #include <chrono>
 #include <atomic>
+#include <unordered_set>
 
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
@@ -117,6 +118,7 @@ namespace volcano::telnet {
         std::size_t max_message_buffer{2 * 1024 * 1024};
         std::size_t max_appdata_buffer{64 * 1024};
         boost::asio::steady_timer::duration negotiation_timeout{std::chrono::milliseconds(700)};
+        std::unordered_set<std::string> idle_commands{"IDLE"};
     };
 
     extern TelnetLimits telnet_limits;

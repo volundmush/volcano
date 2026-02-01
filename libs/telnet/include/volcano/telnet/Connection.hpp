@@ -82,6 +82,7 @@ namespace volcano::telnet {
 
         // event handlers
         boost::asio::awaitable<void> handleAppData(TelnetMessageData& app_data);
+        boost::asio::awaitable<void> handleGMCP(TelnetMessageGMCP& gmcp);
         boost::asio::awaitable<void> handleNegotiate(TelnetMessageNegotiation& negotiation);
         boost::asio::awaitable<void> handleSubNegotiation(TelnetMessageSubnegotiation& subnegotiation);
         boost::asio::awaitable<void> handleCommand(TelnetMessageCommand& command);

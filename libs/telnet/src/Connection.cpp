@@ -672,7 +672,9 @@ namespace volcano::telnet {
             }
 
             std::string line = append_data_buffer_.substr(0, pos);
-            co_await send_line(std::move(line));
+            if(!telnet_limits.idle_commands.contains(line)) {
+                co_await send_line(std::move(line));
+            }
             append_data_buffer_.erase(0, pos + 1);
         }
 
@@ -729,13 +731,6 @@ namespace volcano::telnet {
         if(std::holds_alternative<TelnetMessageData>(data)) {
             TelnetMessageData& msg = std::get<TelnetMessageData>(data);
             co_await handleAppData(msg);
-        } else if(std::holds_alternative<TelnetMessageGMCP>(data)) {
-            TelnetMessageGMCP& msg = std::get<TelnetMessageGMCP>(data);
-            boost::system::error_code ec;
-            co_await to_game_messages_->async_send(ec, TelnetMessageGMCP{std::move(msg.package), std::move(msg.data)}, boost::asio::use_awaitable);
-            if(ec) {
-                LERROR("{} to_game channel error: {}", *this, ec.message());
-            }
         } else if(std::holds_alternative<TelnetMessageNegotiation>(data)) {
             TelnetMessageNegotiation& msg = std::get<TelnetMessageNegotiation>(data);
             co_await handleNegotiate(msg);

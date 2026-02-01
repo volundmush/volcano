@@ -20,6 +20,7 @@ namespace volcano::mud
         bool mccp3 = false;
         bool mccp3_enabled = false;
         bool gmcp = false;
+        std::vector<std::string> gmcp_supports_set;
         bool mtts = false;
         bool naws = false;
         bool charset = false;

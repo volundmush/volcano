@@ -19,6 +19,7 @@ void to_json(nlohmann::json& j, const ClientData& capabilities) {
     j[+"mccp3"] = capabilities.mccp3;
     j[+"mccp3_enabled"] = capabilities.mccp3_enabled;
     j[+"gmcp"] = capabilities.gmcp;
+    j[+"gmcp_supports_set"] = capabilities.gmcp_supports_set;
     j[+"mtts"] = capabilities.mtts;
     j[+"naws"] = capabilities.naws;
     j[+"charset"] = capabilities.charset;
@@ -49,6 +50,7 @@ void from_json(const nlohmann::json& j, ClientData& capabilities) {
     if(j.contains(+"mccp3")) j.at(+"mccp3").get_to(capabilities.mccp3);
     if(j.contains(+"mccp3_enabled")) j.at(+"mccp3_enabled").get_to(capabilities.mccp3_enabled);
     if(j.contains(+"gmcp")) j.at(+"gmcp").get_to(capabilities.gmcp);
+    if(j.contains(+"gmcp_supports_set")) j.at(+"gmcp_supports_set").get_to(capabilities.gmcp_supports_set);
     if(j.contains(+"mtts")) j.at(+"mtts").get_to(capabilities.mtts);
     if(j.contains(+"naws")) j.at(+"naws").get_to(capabilities.naws);
     if(j.contains(+"charset")) j.at(+"charset").get_to(capabilities.charset);
@@ -64,4 +66,4 @@ void from_json(const nlohmann::json& j, ClientData& capabilities) {
     if(j.contains(+"tls_support")) j.at(+"tls_support").get_to(capabilities.tls_support);
 }
 
-} // namespace dbat::mud
+} // namespace volcano::mud
