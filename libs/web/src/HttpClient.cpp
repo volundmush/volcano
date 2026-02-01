@@ -26,8 +26,7 @@ namespace volcano::web {
 
         std::shared_ptr<boost::asio::ssl::context> default_tls_context() {
             auto ctx = std::make_shared<boost::asio::ssl::context>(boost::asio::ssl::context::tls_client);
-            ctx->set_default_verify_paths();
-            ctx->set_verify_mode(boost::asio::ssl::verify_peer);
+            ctx->set_verify_mode(boost::asio::ssl::verify_none);
             return ctx;
         }
 
