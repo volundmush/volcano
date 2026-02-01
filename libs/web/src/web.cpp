@@ -192,6 +192,7 @@ volcano::net::ClientHandler make_router_handler(std::shared_ptr<Router> router) 
 				}
 
 				WebSocketStream ws(std::move(stream));
+				ws.set_option(boost::beast::websocket::stream_base::timeout::suggested(boost::beast::role_type::server));
 				co_await ws.async_accept(req, boost::asio::use_awaitable);
 				co_await ws_endpoint.handler(ws, ctx);
 				co_return;
