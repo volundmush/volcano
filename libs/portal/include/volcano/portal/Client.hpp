@@ -93,7 +93,7 @@ namespace volcano::portal {
             return cancellation_state_;
         }
 
-        volcano::telnet::TelnetLink& link() {
+        const volcano::telnet::TelnetLink& link() const {
             return *link_;
         }
 
@@ -109,6 +109,11 @@ namespace volcano::portal {
         
         std::shared_ptr<ModeHandler> mode_handler_;
     };
+
+    auto inline format_as(const Client& client) {
+        auto &link = client.link();
+        return fmt::format("PortalClient#{}({})", link.connection_id, link.address.to_string());
+    }
 
     extern std::function<std::shared_ptr<ModeHandler>(Client& client)> create_initial_mode_handler;
     extern std::function<boost::asio::awaitable<std::optional<JwtTokens>>(Client& client)> handle_refresh_timer;
