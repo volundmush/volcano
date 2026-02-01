@@ -219,6 +219,9 @@ namespace volcano::telnet {
             
             while(true) {
                 // we need to grab as many bytes as are available but not wait for more than that.
+                if(cancelled_) {
+                    co_return;
+                }
                 boost::system::error_code read_ec;
                 auto prepared = buffer.prepare(4096);
                 std::size_t read_bytes = co_await conn_.async_read_some(
@@ -354,6 +357,9 @@ namespace volcano::telnet {
     boost::asio::awaitable<void> TelnetConnection::runOutboundBridge() {
         try {
             for(;;) {
+                if(cancelled_) {
+                    co_return;
+                }
                 boost::system::error_code ec;
                 auto msg = co_await to_telnet_messages_->async_receive(
                     boost::asio::bind_cancellation_slot(
@@ -385,6 +391,9 @@ namespace volcano::telnet {
 
         try {
             for(;;) {
+                if(cancelled_) {
+                    co_return;
+                }
                 boost::system::error_code ec;
                 auto msg = co_await outgoing_messages_.async_receive(
                     boost::asio::bind_cancellation_slot(
@@ -489,6 +498,7 @@ namespace volcano::telnet {
 
     void TelnetConnection::signalShutdown(TelnetShutdownReason reason) {
         TelnetShutdownReason expected = TelnetShutdownReason::unknown;
+        cancelled_ = true;
         if(shutdown_reason_.compare_exchange_strong(expected, reason)) {
             cancellation_signal_.emit(boost::asio::cancellation_type::all);
         }
@@ -788,6 +798,9 @@ namespace volcano::telnet {
         boost::asio::steady_timer keepalive_timer(exec);
         try {
             while(true) {
+                if(cancelled_) {
+                    co_return;
+                }
                 keepalive_timer.expires_after(std::chrono::seconds(30));
                 boost::system::error_code timer_ec;
                 co_await keepalive_timer.async_wait(
