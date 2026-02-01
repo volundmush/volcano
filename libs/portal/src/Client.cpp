@@ -320,7 +320,7 @@ namespace volcano::portal {
         boost::system::error_code ec;
         co_await link_->to_telnet->async_send(
             ec,
-            volcano::telnet::TelnetDisconnect::remote_disconnect,
+            volcano::telnet::TelnetDisconnect::local_disconnect,
             boost::asio::redirect_error(boost::asio::use_awaitable, ec));
         if(ec) {
             LERROR("Failed to send Disconnect to telnet link {}: {}", *link_, ec.message());

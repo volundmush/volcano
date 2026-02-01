@@ -341,4 +341,19 @@ namespace volcano::net {
                 boost::asio::redirect_error(boost::asio::use_awaitable, ec)));
         co_return;
     }
+
+    boost::asio::awaitable<void> waitForever(boost::asio::cancellation_state& state) {
+        auto exec = co_await boost::asio::this_coro::executor;
+        if(state.cancelled() != boost::asio::cancellation_type::none) {
+            co_return;
+        }
+        boost::asio::steady_timer timer(exec);
+        timer.expires_at(boost::asio::steady_timer::time_point::max());
+        boost::system::error_code ec;
+        co_await timer.async_wait(
+            boost::asio::bind_cancellation_slot(
+                state.slot(),
+                boost::asio::redirect_error(boost::asio::use_awaitable, ec)));
+        co_return;
+    }
 }

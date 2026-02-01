@@ -71,5 +71,6 @@ namespace volcano::net {
     void run(int numThreads = std::thread::hardware_concurrency());
 
     boost::asio::awaitable<void> waitForever(boost::asio::cancellation_signal& signal);
+    boost::asio::awaitable<void> waitForever(boost::asio::cancellation_state& state);
 
 }

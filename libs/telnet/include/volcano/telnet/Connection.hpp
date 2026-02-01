@@ -60,8 +60,8 @@ namespace volcano::telnet {
         std::string append_data_buffer_;
         bool telnet_mode{false};
         boost::asio::cancellation_signal cancellation_signal_;
+        boost::asio::cancellation_state cancellation_state_;
         bool negotiation_completed_{false};
-        bool cancelled_{false};
 
         boost::asio::awaitable<void> runReader();
         boost::asio::awaitable<void> runWriter();

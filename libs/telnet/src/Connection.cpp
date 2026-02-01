@@ -176,6 +176,7 @@ namespace volcano::telnet {
         to_game_messages_(std::make_shared<Channel<TelnetToGameMessage>>(conn_.get_executor(), 100)) {
             client_data_.tls = conn_.is_tls();
             client_data_.client_protocol = "telnet";
+            cancellation_state_ = boost::asio::cancellation_state(cancellation_signal_.slot());
 
             options_.emplace(codes::SGA, std::make_shared<SGAOption>(*this));
             options_.emplace(codes::NAWS, std::make_shared<NAWSOption>(*this));
@@ -219,7 +220,7 @@ namespace volcano::telnet {
             
             while(true) {
                 // we need to grab as many bytes as are available but not wait for more than that.
-                if(cancelled_) {
+                if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
                     co_return;
                 }
                 boost::system::error_code read_ec;
@@ -227,10 +228,10 @@ namespace volcano::telnet {
                 std::size_t read_bytes = co_await conn_.async_read_some(
                     prepared,
                     boost::asio::bind_cancellation_slot(
-                        cancellation_signal_.slot(),
+                        cancellation_state_.slot(),
                         boost::asio::redirect_error(boost::asio::use_awaitable, read_ec)));
                 if(read_ec) {
-                    if(read_ec == boost::asio::error::operation_aborted) {
+                    if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
                         co_return;
                     }
                     LINFO("TelnetConnection read error with {}: {}", *this, read_ec.message());
@@ -261,6 +262,9 @@ namespace volcano::telnet {
                 }
 
                 for(;;) {
+                    if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
+                        co_return;
+                    }
                     boost::beast::flat_buffer& use_buffer = decompressing ? decompressed_buffer : buffer;
 
                     if(use_buffer.size() == 0) {
@@ -273,7 +277,7 @@ namespace volcano::telnet {
                         co_await sendToClient(TelnetDisconnect::buffer_overflow);
                         boost::system::error_code send_ec;
                         co_await to_game_messages_->async_send(send_ec, TelnetDisconnect::buffer_overflow, boost::asio::use_awaitable);
-                        co_await volcano::net::waitForever(cancellation_signal_);
+                        co_await volcano::net::waitForever(cancellation_state_);
                         co_return;
                     }
 
@@ -326,6 +330,9 @@ namespace volcano::telnet {
 
             }
         } catch(boost::system::system_error& e) {
+            if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
+                co_return;
+            }
               LERROR("{} reader encountered an error: {}", conn_, e.what());
               signalShutdown(TelnetShutdownReason::error);
         }
@@ -344,10 +351,16 @@ namespace volcano::telnet {
             if(link_ec) {
                 LERROR("Telnet link channel error: {}", link_ec.message());
             }
-
-            co_await volcano::net::waitForever(cancellation_signal_);
+            
+            if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
+                co_return;
+            }
+            co_await volcano::net::waitForever(cancellation_state_);
 
         } catch(const boost::system::system_error& e) {
+            if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
+                co_return;
+            }
             LERROR("{} runLink encountered an error: {}", *this, e.what());
             signalShutdown(TelnetShutdownReason::error);
         }
@@ -357,13 +370,13 @@ namespace volcano::telnet {
     boost::asio::awaitable<void> TelnetConnection::runOutboundBridge() {
         try {
             for(;;) {
-                if(cancelled_) {
+                if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
                     co_return;
                 }
                 boost::system::error_code ec;
                 auto msg = co_await to_telnet_messages_->async_receive(
                     boost::asio::bind_cancellation_slot(
-                        cancellation_signal_.slot(),
+                        cancellation_state_.slot(),
                         boost::asio::redirect_error(boost::asio::use_awaitable, ec))
                 );
                 if(ec) {
@@ -391,17 +404,17 @@ namespace volcano::telnet {
 
         try {
             for(;;) {
-                if(cancelled_) {
+                if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
                     co_return;
                 }
                 boost::system::error_code ec;
                 auto msg = co_await outgoing_messages_.async_receive(
                     boost::asio::bind_cancellation_slot(
-                        cancellation_signal_.slot(),
+                        cancellation_state_.slot(),
                         boost::asio::redirect_error(boost::asio::use_awaitable, ec))
                 );
                 if(ec) {
-                    if(ec == boost::asio::error::operation_aborted) {
+                    if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
                         co_return;
                     }
                     LERROR("{} write channel error with: {}", *this, ec.message());
@@ -461,7 +474,7 @@ namespace volcano::telnet {
                     conn_,
                     use_buffer,
                     boost::asio::bind_cancellation_slot(
-                        cancellation_signal_.slot(),
+                        cancellation_state_.slot(),
                         boost::asio::redirect_error(boost::asio::use_awaitable, write_ec)));
                 if(write_ec) {
                     if(write_ec == boost::asio::error::operation_aborted) {
@@ -498,10 +511,11 @@ namespace volcano::telnet {
 
     void TelnetConnection::signalShutdown(TelnetShutdownReason reason) {
         TelnetShutdownReason expected = TelnetShutdownReason::unknown;
-        cancelled_ = true;
         if(shutdown_reason_.compare_exchange_strong(expected, reason)) {
             cancellation_signal_.emit(boost::asio::cancellation_type::all);
         }
+        conn_.lowest_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both);
+        conn_.lowest_layer().close();
     }
 
     boost::asio::awaitable<void> TelnetConnection::negotiateOptions() {
@@ -658,7 +672,7 @@ namespace volcano::telnet {
                 co_await sendToClient(TelnetDisconnect::appdata_overflow);
                 boost::system::error_code send_ec;
                 co_await to_game_messages_->async_send(send_ec, TelnetDisconnect::appdata_overflow, boost::asio::use_awaitable);
-                co_await volcano::net::waitForever(cancellation_signal_);
+                co_await volcano::net::waitForever(cancellation_state_);
                 co_return;
             }
         }
@@ -798,17 +812,17 @@ namespace volcano::telnet {
         boost::asio::steady_timer keepalive_timer(exec);
         try {
             while(true) {
-                if(cancelled_) {
+                if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
                     co_return;
                 }
                 keepalive_timer.expires_after(std::chrono::seconds(30));
                 boost::system::error_code timer_ec;
                 co_await keepalive_timer.async_wait(
                     boost::asio::bind_cancellation_slot(
-                        cancellation_signal_.slot(),
+                        cancellation_state_.slot(),
                         boost::asio::redirect_error(boost::asio::use_awaitable, timer_ec)));
                 if(timer_ec) {
-                    if(timer_ec == boost::asio::error::operation_aborted) {
+                    if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
                         co_return;
                     }
                     LERROR("{} keepalive timer error: {}", *this, timer_ec.message());
@@ -821,6 +835,9 @@ namespace volcano::telnet {
                 }
             }
         } catch(const boost::system::system_error& e) {
+            if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
+                co_return;
+            }
               LERROR("{} keepalive encountered an error: {}", *this, e.what());
               signalShutdown(TelnetShutdownReason::error);
         }
