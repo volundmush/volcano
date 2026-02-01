@@ -44,4 +44,5 @@ target_link_libraries(volcano_net
     OpenSSL::SSL
     OpenSSL::Crypto
     Threads::Threads
+    PkgConfig::LIBURING
 )

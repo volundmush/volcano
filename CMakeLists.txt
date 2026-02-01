@@ -36,6 +36,9 @@ find_package(OpenSSL REQUIRED)
 find_package(Boost CONFIG REQUIRED COMPONENTS regex iostreams url)
 find_package(ZLIB REQUIRED)
 find_package(Threads REQUIRED)
+# sudo apt-get install pkg-config liburing-dev
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBURING REQUIRED IMPORTED_TARGET liburing)
 
 if(UNIX AND NOT APPLE)
   set(MATH_LIB m)
