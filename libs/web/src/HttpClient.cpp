@@ -4,13 +4,16 @@
 #include "volcano/net/net.hpp"
 
 #include <boost/asio/as_tuple.hpp>
+#include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/redirect_error.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
 #include <algorithm>
 #include <cctype>
 #include <stdexcept>
+#include <system_error>
 
 namespace volcano::web {
 
@@ -52,6 +55,10 @@ namespace volcano::web {
 
             return host;
         }
+
+        std::error_code to_std_error(const boost::system::error_code& ec) {
+            return std::error_code(ec.value(), std::system_category());
+        }
     }
 
     HttpSession::HttpSession(HttpTarget target, std::shared_ptr<boost::asio::ssl::context> tls_context)
@@ -70,9 +77,12 @@ namespace volcano::web {
         stream_.reset();
     }
 
-    boost::asio::awaitable<void> HttpSession::connect() {
+    boost::asio::awaitable<std::expected<void, std::string>> HttpSession::connect(
+        std::optional<std::chrono::milliseconds> timeout) {
+        using namespace boost::asio::experimental::awaitable_operators;
+
         if (is_open()) {
-            co_return;
+            co_return std::expected<void, std::string>{};
         }
 
         auto host_header = target_.host_header;
@@ -86,18 +96,51 @@ namespace volcano::web {
             options.transport = volcano::net::TransportMode::tls;
             options.tls_context = tls_context_ ? tls_context_ : default_tls_context();
         }
+        if (timeout) {
+            options.timeout = *timeout;
+        }
 
-        auto connected = co_await volcano::net::connect_any(connect_host, target_.port, options);
+        auto connect_task = volcano::net::connect_any(connect_host, target_.port, options);
+        std::expected<volcano::net::AnyStream, boost::system::error_code> connected =
+            std::unexpected(boost::system::error_code{});
+
+        if (timeout) {
+            auto exec = co_await boost::asio::this_coro::executor;
+            boost::asio::steady_timer timer(exec);
+            timer.expires_after(*timeout);
+
+            boost::system::error_code timer_ec;
+            auto result = co_await (
+                std::move(connect_task) ||
+                timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, timer_ec))
+            );
+
+            if (result.index() == 1) {
+                co_return std::unexpected("timed out");
+            }
+
+            connected = std::move(std::get<0>(result));
+        } else {
+            connected = co_await std::move(connect_task);
+        }
+
         if (!connected) {
-            auto prefix = target_.scheme == HttpScheme::https ? "TLS connect failed: " : "TCP connect failed: ";
-            throw std::runtime_error(prefix + connected.error().message());
+            co_return std::unexpected(connected.error().what());
         }
 
         stream_.emplace(std::move(*connected));
+        co_return std::expected<void, std::string>{};
     }
 
-    boost::asio::awaitable<HttpResponse> HttpSession::request(HttpRequest request) {
-        co_await connect();
+    boost::asio::awaitable<std::expected<HttpResponse, std::string>> HttpSession::request(
+        HttpRequest request,
+        std::optional<std::chrono::milliseconds> timeout) {
+        using namespace boost::asio::experimental::awaitable_operators;
+
+        auto connected = co_await connect(timeout);
+        if (!connected) {
+            co_return std::unexpected(connected.error());
+        }
 
         request.version(11);
         request.keep_alive(true);
@@ -106,18 +149,67 @@ namespace volcano::web {
         }
 
         buffer_.consume(buffer_.size());
-        boost::system::error_code ec;
-        co_await http::async_write(*stream_, request, boost::asio::redirect_error(boost::asio::use_awaitable, ec));
-        if (ec) {
+        boost::system::error_code write_ec;
+        auto write_task = http::async_write(*stream_, request, boost::asio::redirect_error(boost::asio::use_awaitable, write_ec));
+
+        if (timeout) {
+            auto exec = co_await boost::asio::this_coro::executor;
+            boost::asio::steady_timer timer(exec);
+            timer.expires_after(*timeout);
+
+            boost::system::error_code timer_ec;
+            auto result = co_await (
+                std::move(write_task) ||
+                timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, timer_ec))
+            );
+
+            if (result.index() == 1) {
+                if (stream_) {
+                    boost::system::error_code cancel_ec;
+                    stream_->lowest_layer().cancel(cancel_ec);
+                }
+                close();
+                co_return std::unexpected("timed out");
+            }
+        } else {
+            co_await std::move(write_task);
+        }
+
+        if (write_ec) {
             close();
-            throw std::runtime_error("HTTP write failed: " + ec.message());
+            co_return std::unexpected(write_ec.what());
         }
 
         HttpResponse response;
-        co_await http::async_read(*stream_, buffer_, response, boost::asio::redirect_error(boost::asio::use_awaitable, ec));
-        if (ec) {
+        boost::system::error_code read_ec;
+        auto read_task = http::async_read(*stream_, buffer_, response, boost::asio::redirect_error(boost::asio::use_awaitable, read_ec));
+
+        if (timeout) {
+            auto exec = co_await boost::asio::this_coro::executor;
+            boost::asio::steady_timer timer(exec);
+            timer.expires_after(*timeout);
+
+            boost::system::error_code timer_ec;
+            auto result = co_await (
+                std::move(read_task) ||
+                timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, timer_ec))
+            );
+
+            if (result.index() == 1) {
+                if (stream_) {
+                    boost::system::error_code cancel_ec;
+                    stream_->lowest_layer().cancel(cancel_ec);
+                }
+                close();
+                co_return std::unexpected("timed out");
+            }
+        } else {
+            co_await std::move(read_task);
+        }
+
+        if (read_ec) {
             close();
-            throw std::runtime_error("HTTP read failed: " + ec.message());
+            co_return std::unexpected(read_ec.what());
         }
 
         if (!response.keep_alive()) {
@@ -187,18 +279,24 @@ namespace volcano::web {
     HttpClient::HttpClient(HttpTarget target, HttpPoolOptions options)
         : pool_(std::make_shared<HttpSessionPool>(std::move(target), std::move(options))) {}
 
-    boost::asio::awaitable<HttpResponse> HttpClient::request(HttpRequest request) {
-        for (;;) {
-            auto session = co_await pool_->acquire();
-            try {
-                auto response = co_await session->request(std::move(request));
-                pool_->release(session);
-                co_return response;
-            } catch (...) {
-                session->close();
-                pool_->release(session);
-            }
+    boost::asio::awaitable<std::expected<HttpResponse, std::string>> HttpClient::request(
+        HttpRequest request,
+        std::optional<std::chrono::milliseconds> timeout) {
+        auto effective_timeout = timeout.value_or(pool_->options().request_timeout);
+
+        std::shared_ptr<HttpSession> session;
+        try {
+            session = co_await pool_->acquire();
+        } catch (...) {
+            co_return std::unexpected("resource unavailable, try again later");
         }
+
+        auto response = co_await session->request(std::move(request), effective_timeout);
+        if (!response) {
+            session->close();
+        }
+        pool_->release(session);
+        co_return response;
     }
 
     boost::asio::awaitable<std::expected<HttpTarget, std::string>> parse_http_target(std::string_view url) {

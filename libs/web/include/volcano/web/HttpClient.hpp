@@ -14,6 +14,9 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <chrono>
+#include <expected>
+#include <system_error>
 
 namespace volcano::web {
 
@@ -63,6 +66,7 @@ namespace volcano::web {
     struct HttpPoolOptions {
         std::size_t max_sessions{8};
         std::shared_ptr<boost::asio::ssl::context> tls_context{};
+        std::chrono::milliseconds request_timeout{std::chrono::seconds(30)};
     };
 
     class HttpSession {
@@ -81,10 +85,13 @@ namespace volcano::web {
         [[nodiscard]] bool is_open() const;
         void close();
 
-        boost::asio::awaitable<HttpResponse> request(HttpRequest request);
+        boost::asio::awaitable<std::expected<HttpResponse, std::string>> request(
+            HttpRequest request,
+            std::optional<std::chrono::milliseconds> timeout = std::nullopt);
 
     private:
-        boost::asio::awaitable<void> connect();
+        boost::asio::awaitable<std::expected<void, std::string>> connect(
+            std::optional<std::chrono::milliseconds> timeout);
 
         HttpTarget target_;
         std::shared_ptr<boost::asio::ssl::context> tls_context_;
@@ -98,6 +105,10 @@ namespace volcano::web {
 
         [[nodiscard]] const HttpTarget& target() const {
             return target_;
+        }
+
+        [[nodiscard]] const HttpPoolOptions& options() const {
+            return options_;
         }
 
         boost::asio::awaitable<std::shared_ptr<HttpSession>> acquire();
@@ -129,7 +140,9 @@ namespace volcano::web {
             return pool_->target();
         }
 
-        boost::asio::awaitable<HttpResponse> request(HttpRequest request);
+        boost::asio::awaitable<std::expected<HttpResponse, std::string>> request(
+            HttpRequest request,
+            std::optional<std::chrono::milliseconds> timeout = std::nullopt);
 
     private:
         std::shared_ptr<HttpSessionPool> pool_;
