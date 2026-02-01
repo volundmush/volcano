@@ -15,8 +15,9 @@ namespace volcano::portal {
     std::function<std::shared_ptr<ModeHandler>(Client& client)> create_initial_mode_handler;
     std::function<boost::asio::awaitable<std::optional<JwtTokens>>(Client& client)> handle_refresh_timer;
 
-    ModeHandler::ModeHandler(Client& client)
-    : client_(client)
+        ModeHandler::ModeHandler(Client& client)
+        : client_(client),
+            cancellation_state_(cancellation_signal_.slot())
     {
         
     }
@@ -30,15 +31,13 @@ namespace volcano::portal {
     }
 
     boost::asio::awaitable<void> ModeHandler::runImpl() {
-        co_await volcano::net::waitForever(cancellation_signal_);
         co_return;
     }
 
     boost::asio::awaitable<void> ModeHandler::run() {
         using namespace boost::asio::experimental::awaitable_operators;
         co_await enterMode();
-        co_await (runTelnetReader() || runImpl());
-        LINFO("Exiting mode handler");
+        co_await (runTelnetReader() && runImpl());
         co_await exitMode();
         co_return;
     }
@@ -48,7 +47,7 @@ namespace volcano::portal {
     }
 
     boost::asio::cancellation_slot ModeHandler::cancellationSlot() {
-        return cancellation_signal_.slot();
+        return cancellation_state_.slot();
     }
 
     boost::asio::awaitable<void> ModeHandler::requestMode(std::shared_ptr<ModeHandler> next, bool cancel_self) {
@@ -63,10 +62,14 @@ namespace volcano::portal {
         auto &chan = client_.telnetToGameChannel();
 
         for(;;) {
+            if (cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
+                co_return;
+            }
+
             boost::system::error_code ec;
             auto msg = co_await chan.async_receive(
                 boost::asio::bind_cancellation_slot(
-                    cancellation_signal_.slot(),
+                    cancellation_state_.slot(),
                     boost::asio::redirect_error(boost::asio::use_awaitable, ec))
             );
 
@@ -93,6 +96,10 @@ namespace volcano::portal {
                 const auto &cap_msg = std::get<volcano::telnet::TelnetChangeCapabilities>(game_msg);
                 co_await client_.changeCapabilities(cap_msg.capabilities);
                 co_await handleChangeCapabilities(cap_msg.capabilities);
+            }
+
+            if (cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
+                co_return;
             }
         }
     }
@@ -131,7 +138,7 @@ namespace volcano::portal {
             req.set(boost::beast::http::field::authorization, "Bearer " + tokens->jwt);
         }
         req.set(boost::beast::http::field::user_agent, "volcano-portal/1.0");
-        req.set(boost::beast::http::field::x_forwarded_for, client_info_.address.to_string());
+        req.set(boost::beast::http::field::x_forwarded_for, link_->address.to_string());
         return req;
     }
 
@@ -308,6 +315,9 @@ namespace volcano::portal {
     {
         boost::system::error_code ec;
         co_await mode_handler_channel_.async_send(ec, std::move(next), boost::asio::use_awaitable);
+        if(ec) {
+            LERROR("Failed to enqueue mode handler in portal client: {}", ec.message());
+        }
         co_return;
     }
 

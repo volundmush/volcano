@@ -5,6 +5,7 @@
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/cancellation_signal.hpp>
+#include <boost/asio/cancellation_state.hpp>
 #include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/steady_timer.hpp>
 
@@ -48,6 +49,7 @@ namespace volcano::portal {
 
         Client& client_;
         boost::asio::cancellation_signal cancellation_signal_;
+        boost::asio::cancellation_state cancellation_state_;
     };
 
     struct JwtTokens {
@@ -87,7 +89,16 @@ namespace volcano::portal {
             return link_->client_data;
         }
 
+        boost::asio::cancellation_state cancellationState() {
+            return cancellation_state_;
+        }
+
+        volcano::telnet::TelnetLink& link() {
+            return *link_;
+        }
+
         private:
+        boost::asio::cancellation_state cancellation_state_;
         std::shared_ptr<volcano::telnet::TelnetLink> link_;
         volcano::web::ClientInfo client_info_;
         volcano::web::HttpClient http_client_;
