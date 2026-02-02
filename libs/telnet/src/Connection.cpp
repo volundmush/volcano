@@ -170,7 +170,7 @@ namespace volcano::telnet {
     }
 
     TelnetConnection::TelnetConnection(volcano::net::AnyStream connection)
-        : conn_(std::move(connection)), 
+        : conn_(std::move(connection)), keepalive_timer_(conn_.get_executor()),
         outgoing_messages_(conn_.get_executor(), 100),
         to_telnet_messages_(std::make_shared<Channel<TelnetToTelnetMessage>>(conn_.get_executor(), 100)),
         to_game_messages_(std::make_shared<Channel<TelnetToGameMessage>>(conn_.get_executor(), 100)) {
@@ -216,183 +216,158 @@ namespace volcano::telnet {
         volcano::zlib::InflateStream inflater;
         boost::beast::flat_buffer buffer, decompressed_buffer;
 
-        try {
-            
-            while(true) {
-                // we need to grab as many bytes as are available but not wait for more than that.
-                if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
-                    co_return;
-                }
-                boost::system::error_code read_ec;
-                auto prepared = buffer.prepare(4096);
-                std::size_t read_bytes = co_await conn_.async_read_some(
-                    prepared,
-                    boost::asio::bind_cancellation_slot(
-                        cancellation_state_.slot(),
-                        boost::asio::redirect_error(boost::asio::use_awaitable, read_ec)));
-                if(read_ec) {
-                    if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
-                        co_return;
-                    }
-                    LINFO("TelnetConnection read error with {}: {}", *this, read_ec.message());
-                    boost::system::error_code send_ec;
-                    co_await to_game_messages_->async_send(send_ec, TelnetDisconnect::remote_disconnect, boost::asio::use_awaitable);
-                    if(send_ec) {
-                        LERROR("{} to_game channel error: {}", *this, send_ec.message());
-                    }
-                    signalShutdown(TelnetShutdownReason::client_disconnect);
-                    co_return;
-                }
-                buffer.commit(read_bytes);
-                if(buffer.size() == 0) {
-                    continue;
-                }
-
-                if(decompressing) {
-                    try {
-                        auto input = buffer_as_bytes(buffer);
-                        inflater.write(input, [&](std::span<const std::byte> chunk) {
-                            append_bytes(decompressed_buffer, chunk);
-                        });
-                        buffer.consume(buffer.size());
-                    } catch (const std::exception& e) {
-                        LERROR("{} zlib inflate error {}", *this, e.what());
-                        co_return;
-                    }
-                }
-
-                for(;;) {
-                    if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
-                        co_return;
-                    }
-                    boost::beast::flat_buffer& use_buffer = decompressing ? decompressed_buffer : buffer;
-
-                    if(use_buffer.size() == 0) {
-                        break;
-                    }
-
-                    if(use_buffer.size() > telnet_limits.max_message_buffer) {
-                        LERROR("{} incoming buffer exceeded limit ({} bytes).", *this, telnet_limits.max_message_buffer);
-                        co_await sendAppData("Input too large. Disconnecting.\r\n");
-                        co_await sendToClient(TelnetDisconnect::buffer_overflow);
-                        boost::system::error_code send_ec;
-                        co_await to_game_messages_->async_send(send_ec, TelnetDisconnect::buffer_overflow, boost::asio::use_awaitable);
-                        co_await volcano::net::waitForever(cancellation_state_);
-                        co_return;
-                    }
-
-                    auto parsed = parseTelnetMessage(
-                        std::string_view{
-                            static_cast<const char*>(use_buffer.data().data()),
-                            use_buffer.size()
-                        }
-                    );
-
-                    if(!parsed) {
-                        break;
-                    }
-
-                    use_buffer.consume(parsed.value().second);
-
-                    auto &msg = parsed.value().first;
-                    bool enable_mccp3 = false;
-
-                    if(std::holds_alternative<TelnetMessageSubnegotiation>(msg)) {
-                        auto& sub = std::get<TelnetMessageSubnegotiation>(msg);
-                        if(sub.option == codes::MCCP3 && !decompressing) {
-                            enable_mccp3 = true;
-                        }
-                    }
-
-                    co_await processData(msg);
-
-                    if(enable_mccp3) {
-                        nlohmann::json capabilities;
-                        capabilities["mccp3_enabled"] = true;
-                        co_await notifyChangedCapabilities(capabilities);
-                        decompressing = true;
-                        inflater.reset();
-
-                        if(buffer.size() > 0) {
-                            try {
-                                auto input = buffer_as_bytes(buffer);
-                                inflater.write(input, [&](std::span<const std::byte> chunk) {
-                                    append_bytes(decompressed_buffer, chunk);
-                                });
-                                buffer.consume(buffer.size());
-                            } catch (const std::exception& e) {
-                                LERROR("{} zlib inflate error {}", *this, e.what());
-                                co_return;
-                            }
-                        }
-                    }
-                }
-
-            }
-        } catch(boost::system::system_error& e) {
+        while(true) {
+            // we need to grab as many bytes as are available but not wait for more than that.
             if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
                 co_return;
             }
-              LERROR("{} reader encountered an error: {}", conn_, e.what());
-              signalShutdown(TelnetShutdownReason::error);
+            boost::system::error_code read_ec;
+            auto prepared = buffer.prepare(4096);
+            std::size_t read_bytes = co_await conn_.async_read_some(
+                prepared,
+                boost::asio::bind_cancellation_slot(
+                    cancellation_state_.slot(),
+                    boost::asio::redirect_error(boost::asio::use_awaitable, read_ec)));
+            if(read_ec) {
+                if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
+                    co_return;
+                }
+                LINFO("TelnetConnection read error with {}: {}", *this, read_ec.message());
+                boost::system::error_code send_ec;
+                co_await signalShutdown(TelnetDisconnect::socket_close);
+                co_return;
+            }
+            buffer.commit(read_bytes);
+            if(buffer.size() == 0) {
+                continue;
+            }
+
+            if(decompressing) {
+                bool zlib_error = false;
+                try {
+                    auto input = buffer_as_bytes(buffer);
+                    inflater.write(input, [&](std::span<const std::byte> chunk) {
+                        append_bytes(decompressed_buffer, chunk);
+                    });
+                    buffer.consume(buffer.size());
+                } catch (const std::exception& e) {
+                    LERROR("{} zlib inflate error {}", *this, e.what());
+                    zlib_error = true;
+                }
+                if(zlib_error) {
+                    co_await signalShutdown(TelnetDisconnect::error);
+                    co_return;
+                }
+            }
+
+            for(;;) {
+                if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
+                    co_return;
+                }
+                boost::beast::flat_buffer& use_buffer = decompressing ? decompressed_buffer : buffer;
+
+                if(use_buffer.size() == 0) {
+                    break;
+                }
+
+                if(use_buffer.size() > telnet_limits.max_message_buffer) {
+                    LERROR("{} incoming buffer exceeded limit ({} bytes).", *this, telnet_limits.max_message_buffer);
+                    co_await signalShutdown(TelnetDisconnect::error);
+                    co_return;
+                }
+
+                auto parsed = parseTelnetMessage(
+                    std::string_view{
+                        static_cast<const char*>(use_buffer.data().data()),
+                        use_buffer.size()
+                    }
+                );
+
+                if(!parsed) {
+                    break;
+                }
+
+                use_buffer.consume(parsed.value().second);
+
+                auto &msg = parsed.value().first;
+                bool enable_mccp3 = false;
+
+                if(std::holds_alternative<TelnetMessageSubnegotiation>(msg)) {
+                    auto& sub = std::get<TelnetMessageSubnegotiation>(msg);
+                    if(sub.option == codes::MCCP3 && !decompressing) {
+                        enable_mccp3 = true;
+                    }
+                }
+
+                co_await processData(msg);
+
+                if(enable_mccp3) {
+                    nlohmann::json capabilities;
+                    capabilities["mccp3_enabled"] = true;
+                    co_await notifyChangedCapabilities(capabilities);
+                    decompressing = true;
+                    inflater.reset();
+
+                    if(buffer.size() > 0) {
+                        bool zlib_error = false;
+                        try {
+                            auto input = buffer_as_bytes(buffer);
+                            inflater.write(input, [&](std::span<const std::byte> chunk) {
+                                append_bytes(decompressed_buffer, chunk);
+                            });
+                            buffer.consume(buffer.size());
+                        } catch (const std::exception& e) {
+                            LERROR("{} zlib inflate error {}", *this, e.what());
+                            zlib_error = true;
+                        }
+                        if(zlib_error) {
+                            co_await signalShutdown(TelnetDisconnect::error);
+                            co_return;
+                        }
+                    }
+                }
+            }
+
         }
 
         co_return;
     }
 
     boost::asio::awaitable<void> TelnetConnection::runLink() {
-        try {
-            co_await negotiateOptions();
-            negotiation_completed_ = true;
+        co_await negotiateOptions();
+        negotiation_completed_ = true;
 
-            auto link = make_link();
-            boost::system::error_code link_ec;
-            co_await link_channel().async_send(link_ec, link, boost::asio::use_awaitable);
-            if(link_ec) {
-                LERROR("Telnet link channel error: {}", link_ec.message());
-            }
-            
-            if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
-                co_return;
-            }
-            co_await volcano::net::waitForever(cancellation_state_);
-
-        } catch(const boost::system::system_error& e) {
-            if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
-                co_return;
-            }
-            LERROR("{} runLink encountered an error: {}", *this, e.what());
-            signalShutdown(TelnetShutdownReason::error);
+        auto link = make_link();
+        boost::system::error_code link_ec;
+        co_await link_channel().async_send(link_ec, link, boost::asio::use_awaitable);
+        if(link_ec) {
+            LERROR("Telnet link channel error: {}", link_ec.message());
+            co_await signalShutdown(TelnetDisconnect::error);
         }
         co_return;
     }
 
     boost::asio::awaitable<void> TelnetConnection::runOutboundBridge() {
-        try {
-            for(;;) {
+        for(;;) {
+            if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
+                co_return;
+            }
+            boost::system::error_code ec;
+            auto msg = co_await to_telnet_messages_->async_receive(
+                boost::asio::bind_cancellation_slot(
+                    cancellation_state_.slot(),
+                    boost::asio::redirect_error(boost::asio::use_awaitable, ec))
+            );
+            if(ec) {
                 if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
                     co_return;
                 }
-                boost::system::error_code ec;
-                auto msg = co_await to_telnet_messages_->async_receive(
-                    boost::asio::bind_cancellation_slot(
-                        cancellation_state_.slot(),
-                        boost::asio::redirect_error(boost::asio::use_awaitable, ec))
-                );
-                if(ec) {
-                    if(ec == boost::asio::error::operation_aborted) {
-                        co_return;
-                    }
-                    LERROR("{} outbound bridge error: {}", *this, ec.message());
-                    signalShutdown(TelnetShutdownReason::error);
-                    co_return;
-                }
-
-                co_await sendToClient(msg);
+                LERROR("{} outbound bridge error: {}", *this, ec.message());
+                co_await signalShutdown(TelnetDisconnect::error);
+                co_return;
             }
-        } catch(const boost::system::system_error& e) {
-            LERROR("{} outbound bridge encountered an error: {}", *this, e.what());
-            signalShutdown(TelnetShutdownReason::error);
+
+            co_await sendToClient(msg);
         }
         co_return;
     }
@@ -402,120 +377,116 @@ namespace volcano::telnet {
         volcano::zlib::DeflateStream deflater(Z_BEST_COMPRESSION);
         boost::beast::flat_buffer buffer, compressed_buffer;
 
-        try {
-            for(;;) {
+        for(;;) {
+            if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
+                co_return;
+            }
+            boost::system::error_code ec;
+            auto msg = co_await outgoing_messages_.async_receive(
+                boost::asio::bind_cancellation_slot(
+                    cancellation_state_.slot(),
+                    boost::asio::redirect_error(boost::asio::use_awaitable, ec))
+            );
+            if(ec) {
                 if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
                     co_return;
                 }
-                boost::system::error_code ec;
-                auto msg = co_await outgoing_messages_.async_receive(
-                    boost::asio::bind_cancellation_slot(
-                        cancellation_state_.slot(),
-                        boost::asio::redirect_error(boost::asio::use_awaitable, ec))
-                );
-                if(ec) {
-                    if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
-                        co_return;
-                    }
-                    LERROR("{} write channel error with: {}", *this, ec.message());
-                    signalShutdown(TelnetShutdownReason::error);
+                LERROR("{} write channel error with: {}", *this, ec.message());
+                co_await signalShutdown(TelnetDisconnect::error);
+                co_return;
+            }
+
+            if(std::holds_alternative<TelnetDisconnect>(msg)) {
+                co_await signalShutdown(TelnetDisconnect::server_disconnect);
+                co_return;
+            }
+
+            auto &telnet_msg = std::get<TelnetMessage>(msg);
+            auto encoded = encodeTelnetMessage(telnet_msg);
+            if(encoded.empty()) {
+                continue;
+            }
+
+            buffer.consume(buffer.size());
+            compressed_buffer.consume(compressed_buffer.size());
+
+            auto dst = buffer.prepare(encoded.size());
+            std::memcpy(dst.data(), encoded.data(), encoded.size());
+            buffer.commit(encoded.size());
+
+            boost::beast::flat_buffer& use_buffer = compressing ? compressed_buffer : buffer;
+            if(compressing) {
+                bool zlib_error = false;
+                try {
+                    auto input = buffer_as_bytes(buffer);
+                    deflater.write(input, [&](std::span<const std::byte> chunk) {
+                        append_bytes(compressed_buffer, chunk);
+                    }, volcano::zlib::FlushMode::sync);
+                    buffer.consume(buffer.size());
+                } catch (const std::exception& e) {
+                    LERROR("{} zlib deflate error {}", *this, e.what());
+                    zlib_error = true;
+                }
+                if(zlib_error) {
+                    co_await signalShutdown(TelnetDisconnect::error);
                     co_return;
-                }
-
-                if(std::holds_alternative<TelnetDisconnect>(msg)) {
-                    auto reason = std::get<TelnetDisconnect>(msg);
-                    switch (reason) {
-                        case TelnetDisconnect::remote_disconnect:
-                            signalShutdown(TelnetShutdownReason::remote_disconnect);
-                            break;
-                        case TelnetDisconnect::local_disconnect:
-                            signalShutdown(TelnetShutdownReason::aborted);
-                            break;
-                        case TelnetDisconnect::buffer_overflow:
-                        case TelnetDisconnect::appdata_overflow:
-                        case TelnetDisconnect::protocol_error:
-                        case TelnetDisconnect::error:
-                        case TelnetDisconnect::unknown:
-                            signalShutdown(TelnetShutdownReason::error);
-                            break;
-                    }
-                    co_return;
-                }
-
-                auto &telnet_msg = std::get<TelnetMessage>(msg);
-                auto encoded = encodeTelnetMessage(telnet_msg);
-                if(encoded.empty()) {
-                    continue;
-                }
-
-                buffer.consume(buffer.size());
-                compressed_buffer.consume(compressed_buffer.size());
-
-                auto dst = buffer.prepare(encoded.size());
-                std::memcpy(dst.data(), encoded.data(), encoded.size());
-                buffer.commit(encoded.size());
-
-                boost::beast::flat_buffer& use_buffer = compressing ? compressed_buffer : buffer;
-                if(compressing) {
-                    try {
-                        auto input = buffer_as_bytes(buffer);
-                        deflater.write(input, [&](std::span<const std::byte> chunk) {
-                            append_bytes(compressed_buffer, chunk);
-                        }, volcano::zlib::FlushMode::sync);
-                        buffer.consume(buffer.size());
-                    } catch (const std::exception& e) {
-                            LERROR("{} zlib deflate error {}", *this, e.what());
-                        co_return;
-                    }
-                }
-
-                boost::system::error_code write_ec;
-                co_await boost::asio::async_write(
-                    conn_,
-                    use_buffer,
-                    boost::asio::bind_cancellation_slot(
-                        cancellation_state_.slot(),
-                        boost::asio::redirect_error(boost::asio::use_awaitable, write_ec)));
-                if(write_ec) {
-                    if(write_ec == boost::asio::error::operation_aborted) {
-                        co_return;
-                    }
-                    LERROR("{} write error with: {}", *this, write_ec.message());
-                    signalShutdown(TelnetShutdownReason::error);
-                    co_return;
-                }
-
-                if(std::holds_alternative<TelnetMessageSubnegotiation>(telnet_msg)) {
-                    auto& sub = std::get<TelnetMessageSubnegotiation>(telnet_msg);
-                    if(sub.option == codes::MCCP2) {
-                        compressing = true;
-                        nlohmann::json capabilities;
-                        capabilities["mccp2_enabled"] = true;
-                        co_await notifyChangedCapabilities(capabilities);
-                        deflater.reset(Z_BEST_COMPRESSION);
-                    }
                 }
             }
-        } catch(const boost::system::system_error& e) {
-              LERROR("{} writer encountered an error: {}", *this, e.what());
-              signalShutdown(TelnetShutdownReason::error);
+
+            boost::system::error_code write_ec;
+            co_await boost::asio::async_write(
+                conn_,
+                use_buffer,
+                boost::asio::bind_cancellation_slot(
+                    cancellation_state_.slot(),
+                    boost::asio::redirect_error(boost::asio::use_awaitable, write_ec)));
+            if(write_ec) {
+                if(write_ec == boost::asio::error::operation_aborted) {
+                    co_return;
+                }
+                LERROR("{} write error with: {}", *this, write_ec.message());
+                co_await signalShutdown(TelnetDisconnect::error);
+                co_return;
+            }
+
+            if(std::holds_alternative<TelnetMessageSubnegotiation>(telnet_msg)) {
+                auto& sub = std::get<TelnetMessageSubnegotiation>(telnet_msg);
+                if(sub.option == codes::MCCP2) {
+                    compressing = true;
+                    nlohmann::json capabilities;
+                    capabilities["mccp2_enabled"] = true;
+                    co_await notifyChangedCapabilities(capabilities);
+                    deflater.reset(Z_BEST_COMPRESSION);
+                }
+            }
         }
 
         co_return;
     }
 
-    void TelnetConnection::requestAbort() {
-        abort_requested_.store(true, std::memory_order_relaxed);
-        signalShutdown(TelnetShutdownReason::aborted);
-    }
-
-    void TelnetConnection::signalShutdown(TelnetShutdownReason reason) {
-        TelnetShutdownReason expected = TelnetShutdownReason::unknown;
+    boost::asio::awaitable<void> TelnetConnection::signalShutdown(TelnetDisconnect reason) {
+        TelnetDisconnect expected = TelnetDisconnect::socket_close;
         if(shutdown_reason_.compare_exchange_strong(expected, reason)) {
             cancellation_signal_.emit(boost::asio::cancellation_type::all);
         }
-        conn_.lowest_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both);
-        conn_.lowest_layer().close();
+        if(reason != TelnetDisconnect::server_disconnect) {
+            // this was NOT initiated by us, so we should notify the other side.
+            boost::system::error_code ec;
+            co_await to_game_messages_->async_send(ec, reason, boost::asio::use_awaitable);
+            if(ec) {
+                LERROR("{} to_game_messages_ channel error: {}", *this, ec.message());
+            }
+            to_game_messages_->close();
+        }
+        if(reason != TelnetDisconnect::socket_close) {
+            // the socket is still open, we should close it.
+            conn_.lowest_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both);
+            conn_.lowest_layer().close();
+        }
+        // timers seem to hate responding to cancellation signals so just cancel them directly.
+        keepalive_timer_.cancel();
+        
+        co_return;
     }
 
     boost::asio::awaitable<void> TelnetConnection::negotiateOptions() {
@@ -525,9 +496,9 @@ namespace volcano::telnet {
         boost::asio::steady_timer deadline(exec);
         deadline.expires_after(telnet_limits.negotiation_timeout);
 
-        auto wait_all = [this]() -> boost::asio::awaitable<void> {
+        auto wait_all = [&]() -> boost::asio::awaitable<void> {
             for(auto& chan : pending_channels_) {
-                if(abort_requested_.load(std::memory_order_relaxed)) {
+                if(deadline.expiry() <= boost::asio::steady_timer::clock_type::now()) {
                     co_return;
                 }
                 if(!chan) {
@@ -554,10 +525,10 @@ namespace volcano::telnet {
         co_return;
     }
 
-    boost::asio::awaitable<TelnetShutdownReason> TelnetConnection::run() {
+    boost::asio::awaitable<TelnetDisconnect> TelnetConnection::run() {
         using namespace boost::asio::experimental::awaitable_operators;
 
-        shutdown_reason_.store(TelnetShutdownReason::unknown, std::memory_order_relaxed);
+        shutdown_reason_.store(TelnetDisconnect::error, std::memory_order_relaxed);
 
         // first start all options. this will send initial negotiation messages as needed.
         for(auto& [code, option] : options_) {
@@ -570,7 +541,7 @@ namespace volcano::telnet {
         auto l = runLink();
         auto o = runOutboundBridge();
 
-        co_await (std::move(r) || std::move(w) || std::move(k) || std::move(l) || std::move(o));
+        co_await (std::move(r) && std::move(w) && std::move(k) && std::move(l) && std::move(o));
 
         co_return shutdown_reason_.load(std::memory_order_relaxed);
     }
@@ -669,10 +640,9 @@ namespace volcano::telnet {
             if(append_data_buffer_.size() > telnet_limits.max_appdata_buffer) {
                 LERROR("{} appdata buffer exceeded limit ({} bytes).", *this, telnet_limits.max_appdata_buffer);
                 co_await sendAppData("Input line too long. Disconnecting.\r\n");
-                co_await sendToClient(TelnetDisconnect::appdata_overflow);
+                co_await sendToClient(TelnetDisconnect::error);
                 boost::system::error_code send_ec;
-                co_await to_game_messages_->async_send(send_ec, TelnetDisconnect::appdata_overflow, boost::asio::use_awaitable);
-                co_await volcano::net::waitForever(cancellation_state_);
+                co_await to_game_messages_->async_send(send_ec, TelnetDisconnect::error, boost::asio::use_awaitable);
                 co_return;
             }
         }
@@ -808,38 +778,28 @@ namespace volcano::telnet {
     }
 
     boost::asio::awaitable<void> TelnetConnection::runKeepAlive() {
-        auto exec = co_await boost::asio::this_coro::executor;
-        boost::asio::steady_timer keepalive_timer(exec);
-        try {
-            while(true) {
-                if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
-                    co_return;
-                }
-                keepalive_timer.expires_after(std::chrono::seconds(30));
-                boost::system::error_code timer_ec;
-                co_await keepalive_timer.async_wait(
-                    boost::asio::bind_cancellation_slot(
-                        cancellation_state_.slot(),
-                        boost::asio::redirect_error(boost::asio::use_awaitable, timer_ec)));
-                if(timer_ec) {
-                    if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
-                        co_return;
-                    }
-                    LERROR("{} keepalive timer error: {}", *this, timer_ec.message());
-                    signalShutdown(TelnetShutdownReason::error);
-                    co_return;
-                }
-
-                if(telnet_mode) {
-                    co_await sendCommand(codes::NOP);
-                }
-            }
-        } catch(const boost::system::system_error& e) {
+        while(true) {
             if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
                 co_return;
             }
-              LERROR("{} keepalive encountered an error: {}", *this, e.what());
-              signalShutdown(TelnetShutdownReason::error);
+            keepalive_timer_.expires_after(std::chrono::seconds(30));
+            boost::system::error_code timer_ec;
+            co_await keepalive_timer_.async_wait(
+                boost::asio::bind_cancellation_slot(
+                    cancellation_state_.slot(),
+                    boost::asio::redirect_error(boost::asio::use_awaitable, timer_ec)));
+            if(timer_ec) {
+                if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
+                    co_return;
+                }
+                LERROR("{} keepalive timer error: {}", *this, timer_ec.message());
+                co_await signalShutdown(TelnetDisconnect::error);
+                co_return;
+            }
+
+            if(telnet_mode) {
+                co_await sendCommand(codes::NOP);
+            }
         }
 
         co_return;

@@ -64,6 +64,7 @@ namespace volcano::portal {
 
         boost::asio::awaitable<void> run();
 
+        boost::asio::awaitable<void> handleTelnetDisconnect();
         boost::asio::awaitable<void> sendText(const std::string& text);
         boost::asio::awaitable<void> sendLine(const std::string& text);
         boost::asio::awaitable<void> sendGMCP(const std::string& package, const nlohmann::json& data);
@@ -99,7 +100,9 @@ namespace volcano::portal {
         }
 
         private:
+        boost::asio::cancellation_signal cancellation_signal_;
         boost::asio::cancellation_state cancellation_state_;
+        boost::asio::steady_timer refresh_timer_;
         std::shared_ptr<volcano::telnet::TelnetLink> link_;
         volcano::web::ClientInfo client_info_;
         volcano::web::HttpClient http_client_;

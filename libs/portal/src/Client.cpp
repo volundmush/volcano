@@ -15,7 +15,7 @@ namespace volcano::portal {
     std::function<std::shared_ptr<ModeHandler>(Client& client)> create_initial_mode_handler;
     std::function<boost::asio::awaitable<std::optional<JwtTokens>>(Client& client)> handle_refresh_timer;
 
-        ModeHandler::ModeHandler(Client& client)
+    ModeHandler::ModeHandler(Client& client)
         : client_(client),
             cancellation_state_(cancellation_signal_.slot())
     {
@@ -74,7 +74,7 @@ namespace volcano::portal {
             );
 
             if(ec) {
-                if(ec == boost::asio::error::operation_aborted) {
+                if (cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
                     co_return;
                 }
                 co_return;
@@ -82,6 +82,7 @@ namespace volcano::portal {
 
             if(std::holds_alternative<volcano::telnet::TelnetDisconnect>(msg)) {
                 co_await handleDisconnect();
+                co_await client_.handleTelnetDisconnect();
                 co_return;
             }
 
@@ -96,10 +97,6 @@ namespace volcano::portal {
                 const auto &cap_msg = std::get<volcano::telnet::TelnetChangeCapabilities>(game_msg);
                 co_await client_.changeCapabilities(cap_msg.capabilities);
                 co_await handleChangeCapabilities(cap_msg.capabilities);
-            }
-
-            if (cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
-                co_return;
             }
         }
     }
@@ -122,7 +119,11 @@ namespace volcano::portal {
     }
 
     Client::Client(std::shared_ptr<volcano::telnet::TelnetLink> link)
-    : link_(std::move(link)), mode_handler_channel_(volcano::net::context(), 2), http_client_(target)
+    : link_(std::move(link)), 
+    mode_handler_channel_(volcano::net::context(), 2), 
+    http_client_(target), 
+    refresh_timer_(volcano::net::context()),
+    cancellation_state_(cancellation_signal_.slot())
     {
         if (link_) {
             client_info_.address = link_->address;
@@ -195,7 +196,7 @@ namespace volcano::portal {
         co_await enqueueMode(std::move(handler));
 
         // then run all the tasks.
-        co_await (runMode() || runRefresher());
+        co_await (runMode() && runRefresher());
 
         co_return;
     }
@@ -207,15 +208,13 @@ namespace volcano::portal {
             co_return;
         }
 
-        boost::asio::steady_timer timer(volcano::net::context());
-
         for (;;) {
             if (!tokens) {
-                timer.expires_after(std::chrono::seconds(1));
+                refresh_timer_.expires_after(std::chrono::seconds(1));
                 boost::system::error_code ec;
-                co_await timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+                co_await refresh_timer_.async_wait(boost::asio::bind_cancellation_slot(cancellation_state_.slot(), boost::asio::redirect_error(boost::asio::use_awaitable, ec)));
                 if (ec) {
-                    if (ec == boost::asio::error::operation_aborted) {
+                    if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
                         co_return;
                     }
                 }
@@ -228,11 +227,11 @@ namespace volcano::portal {
                 continue;
             }
 
-            timer.expires_after(wait_for);
+            refresh_timer_.expires_after(wait_for);
             boost::system::error_code ec;
-            co_await timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+            co_await refresh_timer_.async_wait(boost::asio::bind_cancellation_slot(cancellation_state_.slot(), boost::asio::redirect_error(boost::asio::use_awaitable, ec)));
             if (ec) {
-                if (ec == boost::asio::error::operation_aborted) {
+                if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
                     co_return;
                 }
                 continue;
@@ -252,6 +251,12 @@ namespace volcano::portal {
                 co_return;
             }
         }
+    }
+
+    boost::asio::awaitable<void> Client::handleTelnetDisconnect()
+    {
+        cancellation_signal_.emit(boost::asio::cancellation_type::all);
+        co_return;
     }
 
     boost::asio::awaitable<void> Client::sendText(const std::string& text)
@@ -320,7 +325,7 @@ namespace volcano::portal {
         boost::system::error_code ec;
         co_await link_->to_telnet->async_send(
             ec,
-            volcano::telnet::TelnetDisconnect::local_disconnect,
+            volcano::telnet::TelnetDisconnect::server_disconnect,
             boost::asio::redirect_error(boost::asio::use_awaitable, ec));
         if(ec) {
             LERROR("Failed to send Disconnect to telnet link {}: {}", *link_, ec.message());

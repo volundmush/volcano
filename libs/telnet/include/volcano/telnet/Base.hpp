@@ -94,19 +94,8 @@ namespace volcano::telnet {
     using TelnetClientMessage = std::variant<TelnetMessageData, TelnetMessageGMCP, TelnetMessageMSSP>;
 
     enum class TelnetDisconnect {
-        unknown,
-        remote_disconnect,
-        local_disconnect,
-        buffer_overflow,
-        appdata_overflow,
-        protocol_error,
-        error,
-    };
-    enum class TelnetShutdownReason {
-        unknown,
-        client_disconnect,
-        remote_disconnect,
-        aborted,
+        socket_close,
+        server_disconnect,
         error,
     };
 
