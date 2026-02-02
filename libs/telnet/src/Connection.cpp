@@ -465,9 +465,12 @@ namespace volcano::telnet {
     }
 
     boost::asio::awaitable<void> TelnetConnection::signalShutdown(TelnetDisconnect reason) {
-        TelnetDisconnect expected = TelnetDisconnect::socket_close;
-        if(shutdown_reason_.compare_exchange_strong(expected, reason)) {
-            cancellation_signal_.emit(boost::asio::cancellation_type::all);
+        shutdown_reason_.store(reason, std::memory_order_relaxed);
+        cancellation_signal_.emit(boost::asio::cancellation_type::all);
+        // close channels to ensure any async_receive wakes up promptly
+        outgoing_messages_.close();
+        if (to_telnet_messages_) {
+            to_telnet_messages_->close();
         }
         if(reason != TelnetDisconnect::server_disconnect) {
             // this was NOT initiated by us, so we should notify the other side.
@@ -478,14 +481,10 @@ namespace volcano::telnet {
             }
             to_game_messages_->close();
         }
-        if(reason != TelnetDisconnect::socket_close) {
-            // the socket is still open, we should close it.
-            conn_.lowest_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both);
-            conn_.lowest_layer().close();
-        }
+        conn_.lowest_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both);
+        conn_.lowest_layer().close();
         // timers seem to hate responding to cancellation signals so just cancel them directly.
         keepalive_timer_.cancel();
-        
         co_return;
     }
 
@@ -790,6 +789,9 @@ namespace volcano::telnet {
                     boost::asio::redirect_error(boost::asio::use_awaitable, timer_ec)));
             if(timer_ec) {
                 if(cancellation_state_.cancelled() != boost::asio::cancellation_type::none) {
+                    co_return;
+                }
+                if(timer_ec == boost::asio::error::operation_aborted) {
                     co_return;
                 }
                 LERROR("{} keepalive timer error: {}", *this, timer_ec.message());

@@ -358,7 +358,7 @@ namespace volcano::portal {
         volcano::telnet::TelnetConnection telnet(std::move(stream));
         LINFO("Starting telnet connection handler for {}", telnet);
         co_await telnet.run();
-        LTRACE("Telnet connection handler for {} has exited.", telnet);
+        LINFO("Telnet connection handler for {} has exited.", telnet);
         co_return;
     }
 
