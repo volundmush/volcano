@@ -28,12 +28,16 @@ CommandData::CommandData(std::string_view txt_in) : _original(std::make_shared<s
             auto pos = argument.find('=');
             lsargs = argument.substr(0, pos);
             rsargs = argument.substr(pos + 1);
+        } else {
+            lsargs = argument;
         }
         if(!lsargs.empty()) {
+            lstrim = boost::trim_copy(lsargs);
             boost::split(lhslist, lsargs, boost::is_space(), boost::token_compress_on);
             boost::split(lhscomm, lsargs, boost::is_any_of(","), boost::token_compress_on);
         }
         if(!rsargs.empty()) {
+            rstrim = boost::trim_copy(rsargs);
             boost::split(rhslist, rsargs, boost::is_space(), boost::token_compress_on);
             boost::split(rhscomm, rsargs, boost::is_any_of(","), boost::token_compress_on);
         }

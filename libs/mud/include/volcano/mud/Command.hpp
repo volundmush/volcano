@@ -22,7 +22,9 @@ namespace volcano::mud {
     std::string_view argument;
     std::vector<std::string_view> arguments;
     std::string_view lsargs;
+    std::string_view lstrim;
     std::string_view rsargs;
+    std::string_view rstrim;
     std::vector<std::string_view> args, lhslist, rhslist, lhscomm, rhscomm;
     bool equals_present;
     std::unordered_map<std::string, std::string> variables;
